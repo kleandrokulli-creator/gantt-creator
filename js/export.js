@@ -37,13 +37,42 @@ function _setExportBusy(btnEl, busy) {
    1. COPY PNG TO CLIPBOARD
    ==================================================================== */
 
+/**
+ * Build a temporary container with gantt + legend (if open) for PNG capture.
+ * Returns { el, cleanup } where cleanup() removes the temp container.
+ */
+function _buildPNGCaptureElement() {
+  const gantt = document.getElementById('gantt-wrapper');
+  const legendBar = document.getElementById('legend-bar');
+  const hasLegend = legendBar && legendBar.classList.contains('open');
+
+  if (!hasLegend) return { el: gantt, cleanup: function() {} };
+
+  // Create a temp wrapper containing gantt + legend
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;background:#fff;';
+  wrapper.style.width = gantt.offsetWidth + 'px';
+
+  const ganttClone = gantt.cloneNode(true);
+  ganttClone.style.height = gantt.offsetHeight + 'px';
+  wrapper.appendChild(ganttClone);
+
+  const legendClone = legendBar.cloneNode(true);
+  legendClone.style.maxHeight = 'none';
+  legendClone.style.padding = '8px 12px';
+  wrapper.appendChild(legendClone);
+
+  document.body.appendChild(wrapper);
+  return { el: wrapper, cleanup: function() { wrapper.remove(); } };
+}
+
 async function exportCopyPNG() {
   const btn = document.querySelector('[onclick="exportCopyPNG()"]');
   _setExportBusy(btn, true);
   _exportFeedback('Generating PNG...');
+  const cap = _buildPNGCaptureElement();
   try {
-    const el = document.getElementById('gantt-wrapper');
-    const canvas = await html2canvas(el, {
+    const canvas = await html2canvas(cap.el, {
       scale: 2, useCORS: true,
       backgroundColor: '#FFFFFF'
     });
@@ -53,6 +82,7 @@ async function exportCopyPNG() {
   } catch (e) {
     _exportFeedback('Failed: ' + e.message, true);
   }
+  cap.cleanup();
   _setExportBusy(btn, false);
 }
 
@@ -65,9 +95,9 @@ async function exportDownloadPNG() {
   const btn = document.querySelector('[onclick="exportDownloadPNG()"]');
   _setExportBusy(btn, true);
   _exportFeedback('Generating high-res PNG...');
+  const cap = _buildPNGCaptureElement();
   try {
-    const el = document.getElementById('gantt-wrapper');
-    const canvas = await html2canvas(el, {
+    const canvas = await html2canvas(cap.el, {
       scale: 3, useCORS: true,
       backgroundColor: '#FFFFFF'
     });
@@ -79,6 +109,7 @@ async function exportDownloadPNG() {
   } catch (e) {
     _exportFeedback('Failed: ' + e.message, true);
   }
+  cap.cleanup();
   _setExportBusy(btn, false);
 }
 
@@ -884,6 +915,14 @@ body { padding-top: 0; }
 .ro-title-name { font-size: 1.2rem; font-weight: 700; }
 .ro-title-meta { font-size: 0.75rem; opacity: 0.6; font-weight: 400; }
 .toolbar { border-top: none; }
+.legend-bar{border-top:1px solid var(--border);background:var(--card);padding:0;overflow:hidden;max-height:0;transition:max-height .25s ease,padding .25s ease}
+.legend-bar.open{max-height:200px;padding:.5rem .8rem}
+.legend-content{display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-start}
+.legend-section{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+.legend-section-title{font-weight:600;color:var(--grey-txt);text-transform:uppercase;font-size:.6rem;letter-spacing:.04em;margin-right:.2rem;white-space:nowrap}
+.legend-item{display:inline-flex;align-items:center;gap:.2rem;padding:.1rem .35rem;border-radius:4px;font-size:.68rem;white-space:nowrap;color:var(--body-fg)}
+.legend-item .legend-swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.legend-item .legend-star{flex-shrink:0;line-height:0}
 </style>
 </head>
 <body>
@@ -929,6 +968,10 @@ body { padding-top: 0; }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
       <span id="expand-label">Expand all</span>
     </button>
+    <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon" title="Show/hide legend">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Legend
+    </button>
   </div>
 
   <div class="tab-bar">
@@ -953,6 +996,9 @@ body { padding-top: 0; }
         <div class="timeline-canvas" id="timeline-canvas"></div>
       </div>
     </div>
+  </div>
+  <div class="legend-bar" id="legend-bar">
+    <div class="legend-content" id="legend-content"></div>
   </div>
 </div>
 
@@ -1266,6 +1312,51 @@ function switchTab() {}
 function renderDataTable() {}
 function scheduleSave() {}
 function snapshotUndo() {}
+
+// Legend
+var legendOpen = false;
+function toggleLegend() {
+  legendOpen = !legendOpen;
+  var bar = document.getElementById('legend-bar');
+  var btn = document.getElementById('legend-toggle');
+  if (!bar || !btn) return;
+  if (legendOpen) {
+    renderLegend();
+    bar.classList.add('open');
+    btn.classList.add('active');
+  } else {
+    bar.classList.remove('open');
+    btn.classList.remove('active');
+  }
+}
+function renderLegend() {
+  var container = document.getElementById('legend-content');
+  if (!container) return;
+  var html = '';
+  var labelEntries = Object.entries(LABEL_COLORS);
+  if (labelEntries.length > 0) {
+    html += '<div class="legend-section"><span class="legend-section-title">Labels:</span>';
+    labelEntries.forEach(function(e) {
+      html += '<span class="legend-item"><span class="legend-swatch" style="background:' + e[1] + '"></span>' + esc(e[0]) + '</span>';
+    });
+    html += '</div>';
+  }
+  var bucketEntries = Object.entries(BUCKET_COLORS);
+  if (bucketEntries.length > 0) {
+    html += '<div class="legend-section"><span class="legend-section-title">Buckets:</span>';
+    bucketEntries.forEach(function(e) {
+      html += '<span class="legend-item"><span class="legend-swatch" style="background:' + e[1] + '"></span>' + esc(e[0]) + '</span>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="legend-section"><span class="legend-section-title">Milestones:</span>';
+  PRIORITY_OPTIONS.forEach(function(p) {
+    var c = PRIORITY_COLORS[p] || '#64748B';
+    html += '<span class="legend-item"><span class="legend-star">' + starSVG(10, c) + '</span>' + esc(p) + '</span>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
 `;
 }
 

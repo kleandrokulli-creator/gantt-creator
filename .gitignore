@@ -1,3 +1,4 @@
 node_modules/
 .DS_Store
 .claude/
+update_data.js

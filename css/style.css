@@ -580,6 +580,33 @@ tr.dragging-source {
 .quick-add-plus { color: var(--blue); font-weight: 700; font-size: .9rem; opacity: .5; transition: opacity .15s; }
 .quick-add-row:hover .quick-add-plus { opacity: 1; }
 
+/* ===== HTML EXPORT DIALOG ===== */
+.html-export-dialog-overlay{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center}
+.html-export-dialog{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;width:420px;max-width:90vw;box-shadow:var(--shadow-lg);font-family:'Inter',sans-serif}
+.html-export-dialog h3{margin:0 0 .3rem;font-size:1.1rem;font-weight:700;color:var(--body-fg)}
+.html-export-info{margin:0 0 .8rem;font-size:.8rem;color:var(--grey-txt)}
+.html-export-desc{font-size:.78rem;color:var(--grey-txt);margin-bottom:1rem;line-height:1.4}
+.html-export-options{display:flex;flex-direction:column;gap:.4rem;margin-bottom:1.2rem}
+.html-export-option{display:flex;align-items:center;gap:.5rem;padding:.5rem .7rem;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:.85rem;transition:all .15s}
+.html-export-option:hover{border-color:var(--blue);background:rgba(59,130,246,.04)}
+.html-export-option input[type="radio"]{accent-color:var(--blue)}
+.html-export-count{margin-left:auto;font-size:.72rem;color:var(--grey-txt);background:var(--bg);padding:.15rem .5rem;border-radius:4px}
+.html-export-actions{display:flex;gap:.6rem;justify-content:flex-end}
+.html-export-cancel{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.5rem 1rem;font-family:inherit;font-size:.85rem;cursor:pointer;color:var(--body-fg)}
+.html-export-confirm{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:.5rem 1.2rem;font-family:inherit;font-size:.85rem;font-weight:600;cursor:pointer}
+.html-export-confirm:hover{opacity:.9}
+.html-export-confirm:disabled{opacity:.5;cursor:wait}
+.html-export-section-label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--grey-txt);margin-bottom:.3rem;margin-top:.6rem;display:flex;align-items:center;gap:.5rem}
+.html-export-toggle-all{font-size:.7rem;text-transform:none;font-weight:400;letter-spacing:0}
+.html-export-toggle-all a{color:var(--blue);text-decoration:none}
+.html-export-toggle-all a:hover{text-decoration:underline}
+.html-export-l1-list{display:flex;flex-direction:column;gap:.3rem;max-height:200px;overflow-y:auto;margin-bottom:1rem;padding-right:.3rem}
+.html-export-l1-item{display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:.82rem;transition:all .15s}
+.html-export-l1-item:hover{border-color:var(--blue);background:rgba(59,130,246,.04)}
+.html-export-l1-item input[type="checkbox"]{accent-color:var(--blue);flex-shrink:0}
+.html-export-l1-name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.html-export-l1-meta{margin-left:auto;font-size:.68rem;color:var(--grey-txt);white-space:nowrap;flex-shrink:0}
+
 /* ===== FOCUS VISIBLE ===== */
 button:focus-visible, .action-btn:focus-visible, .btn-icon:focus-visible, select:focus-visible {
   outline: 2px solid var(--blue);

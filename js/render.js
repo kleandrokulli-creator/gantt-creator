@@ -27,18 +27,36 @@ function renderProjectInfo() {
   const info = DOM.projectInfo;
   const m = projectMeta;
   let html = '';
-  if (m.projectName) html += `<span><strong>${esc(String(m.projectName.value || ''))}</strong></span>`;
-  if (m.startDate) {
-    const sd = excelDateToJS(m.startDate.value);
-    const fd = excelDateToJS(m.finishDate?.value);
-    if (sd) html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${fmtDate(sd)}${fd ? ' → ' + fmtDate(fd) : ''}</span>`;
+
+  // Project name: from meta or project name
+  const projName = m.projectName?.value || projects[currentProjectId]?.name || '';
+  if (projName) html += `<span><strong>${esc(String(projName))}</strong></span>`;
+
+  // Dates: dynamically calculated from tasks (fallback to meta)
+  let projStart = null, projFinish = null;
+  allTasks.forEach(t => {
+    if (t.start && (!projStart || t.start < projStart)) projStart = t.start;
+    if (t.finish && (!projFinish || t.finish > projFinish)) projFinish = t.finish;
+  });
+  if (!projStart && m.startDate) projStart = excelDateToJS(m.startDate.value);
+  if (!projFinish && m.finishDate) projFinish = excelDateToJS(m.finishDate?.value);
+  if (projStart) {
+    html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> ${fmtDate(projStart)}${projFinish ? ' &rarr; ' + fmtDate(projFinish) : ''}</span>`;
   }
-  if (m.percentComplete) {
-    const pct = typeof m.percentComplete.value === 'number'
-      ? (m.percentComplete.value > 1 ? m.percentComplete.value : Math.round(m.percentComplete.value * 100))
-      : m.percentComplete.value;
+
+  // Completion: dynamically calculated from top-level tasks
+  if (allTasks.length > 0) {
+    const topLevel = allTasks.filter(t => t.depth === 1);
+    let totalWeight = 0, weightedPct = 0;
+    topLevel.forEach(t => {
+      const days = (t.start && t.finish) ? Math.max(Math.round((t.finish - t.start) / MS_PER_DAY), 1) : 1;
+      totalWeight += days;
+      weightedPct += t.percentComplete * days;
+    });
+    const pct = totalWeight > 0 ? Math.round((weightedPct / totalWeight) * 100) : 0;
     html += `<span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16h2v-4H7v4zM12 16h2V8h-2v8zM17 16h2v-6h-2v6z"/></svg> ${pct}% complete</span>`;
   }
+
   info.innerHTML = html;
 }
 
@@ -465,9 +483,11 @@ function renderTimelineBars(dpx) {
 
       // Render with vertical staggering (alternating up/down from center)
       const stepY = 12; // px offset per tier
+      // Check if parent bar exists to detect overlap
+      const parentBarRight = r.task.finish ? dateToPxR(r.task.finish, dpx) : 0;
+
       msItems.forEach(item => {
-        const { ms, mx, tier } = item;
-        // Tier 0 = centered, tier 1 = above, tier 2 = below, tier 3 = further above...
+        const { ms, mx, labelW, tier } = item;
         let yOffset = 0;
         if (tier > 0) {
           const level = Math.ceil(tier / 2);
@@ -476,7 +496,14 @@ function renderTimelineBars(dpx) {
         }
         const inMsY = y + (rowH - inMsSize) / 2 + yOffset;
         const inMsColor = getMilestoneColor(ms);
-        html += `<div class="tl-milestone" style="left:${mx - inMsSize / 2}px;top:${inMsY}px;height:${inMsSize}px;white-space:nowrap;display:flex;align-items:center;gap:3px;z-index:${10 - tier}"
+
+        // Decide label position: right of star (default) or left if it would overlap the parent bar end or go off-canvas
+        const labelRight = mx + labelW;
+        const useLeftLabel = labelRight > canvasWidth - 20 || (parentBarRight > 0 && mx < parentBarRight && labelRight > parentBarRight);
+        const flexDir = useLeftLabel ? 'flex-direction:row-reverse;' : '';
+        const leftPos = useLeftLabel ? mx - labelW + inMsSize / 2 : mx - inMsSize / 2;
+
+        html += `<div class="tl-milestone" style="left:${leftPos}px;top:${inMsY}px;height:${inMsSize}px;white-space:nowrap;display:flex;align-items:center;gap:3px;${flexDir}z-index:${10 - tier}"
           onclick="openEditPanel(${ms.id})" onmouseenter="showTooltip(event,${ms.id})" onmouseleave="hideTooltip()" onmousemove="moveTooltip(event)">${starSVG(inMsSize, inMsColor)}<span class="tl-ms-label">${esc(ms.name)}</span></div>`;
       });
     }

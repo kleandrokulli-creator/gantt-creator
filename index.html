@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LVZ 3PC - Gantt Roadmap</title>
+<title>PlanView - Gantt Roadmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=14">
+<link rel="stylesheet" href="css/style.css?v=21">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
@@ -34,7 +34,7 @@
 <div id="app-screen">
   <!-- TOP BAR -->
   <div class="top-bar">
-    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16h2v-4H7v4zM12 16h2V8h-2v8zM17 16h2v-6h-2v6z"/></svg> LVZ 3PC Gantt</div>
+    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16h2v-4H7v4zM12 16h2V8h-2v8zM17 16h2v-6h-2v6z"/></svg> PlanView</div>
     <div class="project-selector">
       <select id="project-select" onchange="switchProject(this.value)" title="Select project"></select>
       <button class="action-btn" onclick="createNewProject()" title="New project" aria-label="New project"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -45,7 +45,6 @@
     <div class="actions">
       <button class="theme-btn" onclick="toggleTheme()"><span id="theme-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span> Theme</button>
       <button class="action-btn" onclick="shareProject()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Share</button>
-      <button class="action-btn" onclick="exportPNG()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> PNG</button>
       <button class="action-btn" onclick="triggerFileUpload()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Load Excel</button>
     </div>
   </div>
@@ -102,7 +101,23 @@
     </button>
     <button onclick="exportExcel()" class="btn-icon" title="Export Excel">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h2l2 3 2-3h2"/></svg>
-      Export
+      Excel
+    </button>
+    <button onclick="exportPNG()" class="btn-icon tab-roadmap" title="Download PNG">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      PNG
+    </button>
+    <button onclick="exportCopyPNG()" class="btn-icon tab-roadmap" title="Copy PNG to clipboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copy
+    </button>
+    <button onclick="exportPPTX()" class="btn-icon tab-roadmap" title="Export PowerPoint">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h2v4H9z"/><path d="M13 11h2v6h-2z"/></svg>
+      PPTX
+    </button>
+    <button onclick="showHTMLExportDialog()" class="btn-icon tab-roadmap" title="Export interactive HTML">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M10 9l-3 3 3 3M14 9l3 3-3 3"/></svg>
+      HTML
     </button>
     <button onclick="openSettings()" class="btn-icon" title="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -201,12 +216,25 @@
 </div>
 
 <!-- SCRIPTS (order matters: state → utils → data → render → ui → app) -->
-<script src="js/state.js?v=14"></script>
-<script src="js/utils.js?v=14"></script>
-<script src="js/data.js?v=14"></script>
-<script src="js/render.js?v=14"></script>
-<script src="js/ui.js?v=14"></script>
-<script src="js/app.js?v=14"></script>
+<script src="js/state.js?v=21"></script>
+<script src="js/utils.js?v=21"></script>
+<script src="js/data.js?v=21"></script>
+<script src="js/render.js?v=21"></script>
+<script src="js/ui.js?v=21"></script>
+<script src="js/export.js?v=21"></script>
+<script src="js/app.js?v=21"></script>
+<script>
+// Pre-cache JS sources in localStorage for HTML export (runs once when loaded via HTTP)
+(function() {
+  if (location.protocol === 'file:') return; // skip on file://, use cache from previous HTTP load
+  var files = { 'style.css': 'css/style.css', 'state.js': 'js/state.js', 'utils.js': 'js/utils.js', 'data.js': 'js/data.js', 'render.js': 'js/render.js' };
+  Object.keys(files).forEach(function(key) {
+    fetch(files[key] + '?t=' + Date.now()).then(function(r) { return r.text(); }).then(function(t) {
+      localStorage.setItem('planview-src-' + key, t);
+    }).catch(function() {});
+  });
+})();
+</script>
 
 </body>
 </html>

@@ -665,25 +665,159 @@ function _shortDate(d) {
    4. STANDALONE INTERACTIVE HTML
    ==================================================================== */
 
-async function exportStandaloneHTML() {
-  const btn = document.querySelector('[onclick="exportStandaloneHTML()"]');
-  _setExportBusy(btn, true);
-  _exportFeedback('Building standalone HTML...');
+function showHTMLExportDialog() {
+  let projStart = null, projFinish = null, taskCount = allTasks.length;
+  allTasks.forEach(t => {
+    if (t.start && (!projStart || t.start < projStart)) projStart = t.start;
+    if (t.finish && (!projFinish || t.finish > projFinish)) projFinish = t.finish;
+  });
+  const dateRange = projStart ? fmtDate(projStart) + ' - ' + fmtDate(projFinish) : 'No dates';
+  const projectName = projects[currentProjectId]?.name || 'Roadmap';
+
+  const depthCounts = {};
+  allTasks.forEach(t => { depthCounts[t.depth] = (depthCounts[t.depth] || 0) + 1; });
+  const maxDepth = Math.max(...Object.keys(depthCounts).map(Number), 1);
+
+  // Depth options
+  let optionsHtml = `<label class="html-export-option">
+    <input type="radio" name="html-depth" value="0" checked onchange="htmlExportUpdateL1(this)"> <strong>All levels</strong> <span class="html-export-count">${taskCount} tasks</span>
+  </label>`;
+  for (let d = 1; d <= Math.min(maxDepth, 4); d++) {
+    const count = allTasks.filter(t => t.depth <= d).length;
+    const label = d === 1 ? 'Level 1 only' : `Levels 1-${d}`;
+    optionsHtml += `<label class="html-export-option">
+      <input type="radio" name="html-depth" value="${d}" onchange="htmlExportUpdateL1(this)"> ${label} <span class="html-export-count">${count} tasks</span>
+    </label>`;
+  }
+
+  // L1 task selection (exclude milestones - they're not projects)
+  const l1Tasks = allTasks.filter(t => t.depth === 1 && !t.isMilestone);
+  let l1Html = '';
+  l1Tasks.forEach(t => {
+    const childCount = allTasks.filter(c => c.outline.startsWith(t.outline + '.')).length;
+    const dateStr = t.start ? fmtDate(t.start) + (t.finish ? ' - ' + fmtDate(t.finish) : '') : '';
+    l1Html += `<label class="html-export-l1-item">
+      <input type="checkbox" name="html-l1" value="${t.id}" checked>
+      <span class="html-export-l1-name">${_escHtml(t.name)}</span>
+      <span class="html-export-l1-meta">${childCount > 0 ? childCount + ' sub-tasks' : 'leaf'} ${dateStr ? '&middot; ' + dateStr : ''}</span>
+    </label>`;
+  });
+
+  const dialog = document.createElement('div');
+  dialog.className = 'html-export-dialog-overlay';
+  dialog.innerHTML = `<div class="html-export-dialog">
+    <h3>Export Interactive HTML</h3>
+    <p class="html-export-info">${_escHtml(projectName)} &middot; ${dateRange}</p>
+    <div class="html-export-desc">Standalone HTML page with interactive read-only roadmap. Anyone can open it in a browser.</div>
+    <div class="html-export-section-label">Depth</div>
+    <div class="html-export-options">${optionsHtml}</div>
+    <div class="html-export-section-label">Include <span class="html-export-toggle-all"><a href="#" onclick="event.preventDefault();document.querySelectorAll('#html-export-l1-list input').forEach(c=>c.checked=true)">all</a> / <a href="#" onclick="event.preventDefault();document.querySelectorAll('#html-export-l1-list input').forEach(c=>c.checked=false)">none</a></span></div>
+    <div class="html-export-l1-list" id="html-export-l1-list">${l1Html}</div>
+    <div class="html-export-actions">
+      <button class="html-export-cancel" onclick="this.closest('.html-export-dialog-overlay').remove()">Cancel</button>
+      <button class="html-export-confirm" onclick="doHTMLExport(this)">Export HTML</button>
+    </div>
+  </div>`;
+  document.body.appendChild(dialog);
+}
+
+function htmlExportUpdateL1(radio) {
+  // When depth changes, update L1 checkboxes to reflect what's relevant
+  const list = document.getElementById('html-export-l1-list');
+  if (!list) return;
+  const items = list.querySelectorAll('input[name="html-l1"]');
+  // All depths show L1 selection
+  items.forEach(cb => { cb.disabled = false; });
+}
+
+async function doHTMLExport(btnEl) {
+  const overlay = btnEl.closest('.html-export-dialog-overlay');
+  const depthVal = parseInt(overlay.querySelector('input[name="html-depth"]:checked').value) || 0;
+
+  // Get selected L1 task IDs
+  const selectedL1 = new Set();
+  overlay.querySelectorAll('input[name="html-l1"]:checked').forEach(cb => {
+    selectedL1.add(parseInt(cb.value));
+  });
+
+  if (selectedL1.size === 0) {
+    alert('Select at least one item to export.');
+    return;
+  }
+
+  btnEl.textContent = 'Exporting...';
+  btnEl.disabled = true;
 
   try {
-    // Fetch source files
-    const v = '?v=' + Date.now(); // cache bust
+    // Load all source files for self-contained HTML export
+    // Try localStorage cache first, then HTTP, then sync XHR
+    async function loadSource(filename) {
+      const cacheKey = 'planview-src-' + filename;
+      // Try localStorage cache
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) return cached;
+      // Try HTTP
+      try {
+        const r = await fetch('js/' + filename + '?t=' + Date.now());
+        if (r.ok) { const t = await r.text(); localStorage.setItem(cacheKey, t); return t; }
+      } catch(e) {}
+      // Try sync XHR (last resort)
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', 'js/' + filename, false);
+        xhr.send();
+        if (xhr.responseText) { localStorage.setItem(cacheKey, xhr.responseText); return xhr.responseText; }
+      } catch(e) {}
+      return '';
+    }
+    async function loadCSS() {
+      const cacheKey = 'planview-src-style.css';
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) return cached;
+      try {
+        const r = await fetch('css/style.css?t=' + Date.now());
+        if (r.ok) { const t = await r.text(); localStorage.setItem(cacheKey, t); return t; }
+      } catch(e) {}
+      // Fallback: extract from loaded stylesheets
+      let css = '';
+      for (const sheet of document.styleSheets) {
+        try { for (const rule of sheet.cssRules) css += rule.cssText + '\n'; } catch(e) {}
+      }
+      return css;
+    }
+
     const [cssText, stateJs, utilsJs, dataJs, renderJs] = await Promise.all([
-      fetch('css/style.css' + v).then(r => r.text()),
-      fetch('js/state.js' + v).then(r => r.text()),
-      fetch('js/utils.js' + v).then(r => r.text()),
-      fetch('js/data.js' + v).then(r => r.text()),
-      fetch('js/render.js' + v).then(r => r.text()),
+      loadCSS(),
+      loadSource('state.js'),
+      loadSource('utils.js'),
+      loadSource('data.js'),
+      loadSource('render.js'),
     ]);
 
-    // Serialize current data
+    if (!stateJs && !renderJs) {
+      throw new Error('Could not load source files. Open the app from GitHub Pages first (https://kleandrokulli-creator.github.io/gantt-creator/) to cache the sources, then export will work from file:// too.');
+    }
+
+    // Build selected L1 outlines for prefix matching
+    const selectedOutlines = allTasks
+      .filter(t => selectedL1.has(t.id) && t.depth === 1)
+      .map(t => t.outline);
+
+    // Filter tasks: must belong to a selected L1 tree AND within depth limit
+    const allSerialized = serializeTasks();
+    const filteredTasks = allSerialized.filter(t => {
+      const outline = t.outline || '1';
+      const depth = outline.split('.').length;
+      // Check if task belongs to a selected L1 group
+      const l1Outline = outline.split('.')[0];
+      if (!selectedOutlines.includes(l1Outline)) return false;
+      // Check depth limit
+      if (depthVal > 0 && depth > depthVal) return false;
+      return true;
+    });
+
     const stateData = {
-      tasks: serializeTasks(),
+      tasks: filteredTasks,
       projectMeta: JSON.parse(JSON.stringify(projectMeta)),
       bucketColors: { ...BUCKET_COLORS },
       labelColors: { ...LABEL_COLORS },
@@ -693,31 +827,31 @@ async function exportStandaloneHTML() {
       currentZoom: currentZoom,
     };
 
-    const projectName = projectMeta.projectName?.value ||
-                        projects[currentProjectId]?.name || 'Roadmap';
+    const projectName = projects[currentProjectId]?.name || 'Roadmap';
 
     const html = _buildStandaloneHTML({
       cssText, stateJs, utilsJs, dataJs, renderJs,
-      stateData, projectName
+      stateData, projectName, taskCount: filteredTasks.length
     });
 
-    // Download
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const a = document.createElement('a');
-    a.download = _exportFileName() + '_interactive.html';
+    const suffix = depthVal > 0 ? `_L${depthVal}` : '';
+    a.download = _exportFileName() + suffix + '_interactive.html';
     a.href = URL.createObjectURL(blob);
     a.click();
     URL.revokeObjectURL(a.href);
-    _exportFeedback('HTML downloaded');
+    overlay.remove();
+    updateSaveIndicator('HTML exported (' + filteredTasks.length + ' tasks)');
   } catch (e) {
     console.error('HTML export error:', e);
-    _exportFeedback('Failed: ' + e.message, true);
+    alert('Export failed: ' + e.message);
+    btnEl.textContent = 'Export HTML';
+    btnEl.disabled = false;
   }
-  _setExportBusy(btn, false);
 }
 
-function _buildStandaloneHTML({ cssText, stateJs, utilsJs, dataJs, renderJs, stateData, projectName }) {
-  // Build a minimal standalone HTML with read-only roadmap
+function _buildStandaloneHTML({ cssText, stateJs, utilsJs, dataJs, renderJs, stateData, projectName, taskCount }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -745,15 +879,20 @@ body { padding-top: 0; }
 .ro-title-bar {
   background: linear-gradient(135deg, #0F1B2D 0%, #1E3A5F 100%);
   color: #fff; padding: 0.8rem 1.5rem; font-family: 'Inter', sans-serif;
-  font-size: 1.2rem; font-weight: 700; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
 }
+.ro-title-name { font-size: 1.2rem; font-weight: 700; }
+.ro-title-meta { font-size: 0.75rem; opacity: 0.6; font-weight: 400; }
 .toolbar { border-top: none; }
 </style>
 </head>
 <body>
 
 <div id="app-screen">
-  <div class="ro-title-bar">${_escHtml(projectName)}</div>
+  <div class="ro-title-bar">
+    <span class="ro-title-name">${_escHtml(projectName)}</span>
+    <span class="ro-title-meta">${taskCount || stateData.tasks.length} tasks &middot; Generated ${new Date().toLocaleDateString('en-GB')}</span>
+  </div>
   <div class="toolbar" id="toolbar">
     <div class="search-box">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>

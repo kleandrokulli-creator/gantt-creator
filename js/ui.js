@@ -1608,10 +1608,27 @@ function exportPNG() {
     backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
   }).then(canvas => {
     const a = document.createElement('a');
-    const pName = projects[currentProjectId]?.name || 'LVZ-3PC-Gantt';
+    const pName = projects[currentProjectId]?.name || 'PlanView';
     a.download = pName.replace(/[^a-zA-Z0-9_-]/g, '_') + '.png';
     a.href = canvas.toDataURL('image/png');
     a.click();
+  });
+}
+
+function exportCopyPNG() {
+  const el = DOM.ganttWrapper;
+  html2canvas(el, {
+    scale: 2, useCORS: true,
+    backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  }).then(canvas => {
+    canvas.toBlob(blob => {
+      if (!blob) { alert('Failed to create image'); return; }
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
+        updateSaveIndicator('PNG copied to clipboard');
+      }).catch(() => {
+        alert('Could not copy to clipboard. Try downloading instead.');
+      });
+    }, 'image/png');
   });
 }
 

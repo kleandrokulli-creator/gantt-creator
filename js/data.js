@@ -236,9 +236,20 @@ function createNewProject(name) {
   const id = generateId();
   const pName = name || prompt('New project name:', DEFAULT_PROJECT_NAME);
   if (pName === null) return;
+
+  // Load global defaults for labels/buckets/priority (if saved)
+  const defaults = loadGlobalDefaults();
+  Object.keys(LABEL_COLORS).forEach(k => delete LABEL_COLORS[k]);
+  Object.assign(LABEL_COLORS, defaults.labelColors);
+  Object.keys(BUCKET_COLORS).forEach(k => delete BUCKET_COLORS[k]);
+  Object.assign(BUCKET_COLORS, defaults.bucketColors);
+  Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
+  Object.assign(PRIORITY_COLORS, defaults.priorityColors);
+
   projects[id] = {
     name: pName || DEFAULT_PROJECT_NAME, meta: {}, tasks: [],
-    labelColors: { ...LABEL_COLORS }, rolloutColors: { ...ROLLOUT_COLORS }
+    labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
+    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS }
   };
   currentProjectId = id;
   projectMeta = {};
@@ -246,6 +257,7 @@ function createNewProject(name) {
   taskTree = [];
   filteredTree = [];
   navStack = [];
+  customBuckets = new Set();
   getState().expandedSet.clear();
   getState().collapsedSet.clear();
   getState().allExpanded = false;
@@ -255,6 +267,62 @@ function createNewProject(name) {
   if (currentTab === 'dati') renderDataTable();
   renderProjectSelector();
   saveCurrentProjectToStorage();
+}
+
+/* ---------- GLOBAL DEFAULTS ---------- */
+
+const _BUILTIN_LABEL_COLORS = {
+  'Business': '#3B82F6', 'IT': '#8B5CF6', 'Mulesoft': '#EC4899',
+  'Testing': '#F59E0B', 'Development': '#10B981', 'UAT': '#EF4444', 'Design': '#14B8A6'
+};
+const _BUILTIN_BUCKET_COLORS = {
+  'AMZ-UK': '#3B82F6', 'eBay UK': '#F59E0B', 'Amazon AUS': '#10B981',
+  'TikTok ITA': '#EC4899', 'Privalia ITA': '#8B5CF6', 'VeePee ITA': '#14B8A6'
+};
+const _BUILTIN_PRIORITY_COLORS = {
+  'Urgent': '#EF4444', 'Important': '#F59E0B', 'Medium': '#3B82F6', 'Low': '#94A3B8'
+};
+
+function saveGlobalDefaults() {
+  try {
+    localStorage.setItem(STORAGE_KEY_DEFAULTS, JSON.stringify({
+      labelColors: { ...LABEL_COLORS },
+      bucketColors: { ...BUCKET_COLORS },
+      priorityColors: { ...PRIORITY_COLORS }
+    }));
+  } catch(e) { console.warn('Could not save defaults:', e); }
+}
+
+function loadGlobalDefaults() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DEFAULTS);
+    if (raw) {
+      const d = JSON.parse(raw);
+      return {
+        labelColors: d.labelColors || { ..._BUILTIN_LABEL_COLORS },
+        bucketColors: d.bucketColors || { ..._BUILTIN_BUCKET_COLORS },
+        priorityColors: d.priorityColors || { ..._BUILTIN_PRIORITY_COLORS }
+      };
+    }
+  } catch(e) {}
+  return {
+    labelColors: { ..._BUILTIN_LABEL_COLORS },
+    bucketColors: { ..._BUILTIN_BUCKET_COLORS },
+    priorityColors: { ..._BUILTIN_PRIORITY_COLORS }
+  };
+}
+
+function resetToBuiltinDefaults() {
+  Object.keys(LABEL_COLORS).forEach(k => delete LABEL_COLORS[k]);
+  Object.assign(LABEL_COLORS, _BUILTIN_LABEL_COLORS);
+  Object.keys(BUCKET_COLORS).forEach(k => delete BUCKET_COLORS[k]);
+  Object.assign(BUCKET_COLORS, _BUILTIN_BUCKET_COLORS);
+  Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
+  Object.assign(PRIORITY_COLORS, _BUILTIN_PRIORITY_COLORS);
+  reassignColors(); renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  if (typeof renderSettingsBody === 'function') renderSettingsBody();
+  scheduleSave();
 }
 
 function renameCurrentProject() {

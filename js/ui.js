@@ -340,28 +340,43 @@ function renderSettingsBody() {
   const body = DOM.settingsBody;
   let html = '';
   if (currentSettingsTab === 'labels') {
-    Object.entries(LABEL_COLORS).forEach(([name, color]) => {
+    const entries = Object.entries(LABEL_COLORS);
+    if (entries.length === 0) {
+      html += `<p class="settings-hint">No labels configured. Add labels or load defaults.</p>`;
+    }
+    entries.forEach(([name, color]) => {
       html += `<div class="setting-row">
         <input type="color" class="swatch" value="${color}" onchange="LABEL_COLORS['${esc(name)}']=this.value;renderAll();if(currentTab==='dati')renderDataTable();scheduleSave()">
         <input type="text" value="${esc(name)}" onchange="renameLabel('${esc(name)}',this.value)">
-        <button class="del-btn" onclick="deleteLabel('${esc(name)}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <button class="del-btn" onclick="deleteLabel('${esc(name)}')" title="Delete label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>`;
     });
-    html += `<button class="add-row-btn" onclick="addLabel()">+ Add label</button>`;
+    html += `<div class="settings-actions">
+      <button class="add-row-btn" onclick="addLabel()">+ Add label</button>
+      <button class="defaults-btn" onclick="saveGlobalDefaults();this.textContent='Saved!';setTimeout(()=>this.textContent='Save as defaults',1500)" title="Save current labels/buckets/priority as defaults for new projects">Save as defaults</button>
+      <button class="defaults-btn" onclick="resetToBuiltinDefaults()" title="Reset labels, buckets and priority to factory defaults">Reset to factory</button>
+    </div>`;
   } else if (currentSettingsTab === 'buckets') {
-    html += `<p class="settings-hint">Ogni bucket ha un colore che viene applicato alle barre dei task assegnati.</p>`;
+    html += `<p class="settings-hint">Each bucket has a color applied to the task bars assigned to it.</p>`;
     const buckets = getAllBuckets().filter(b => b);
+    if (buckets.length === 0) {
+      html += `<p class="settings-hint">No buckets configured. Add buckets or load defaults.</p>`;
+    }
     buckets.forEach(b => {
       const color = BUCKET_COLORS[b] || DEFAULT_COLOR;
       html += `<div class="setting-row">
         <input type="color" class="swatch" value="${color}" onchange="BUCKET_COLORS['${esc(b)}']=this.value;reassignColors();renderAll();if(currentTab==='dati')renderDataTable();scheduleSave()">
         <input type="text" value="${esc(b)}" onchange="renameBucketWithColor('${esc(b)}',this.value)">
-        <button class="del-btn" onclick="deleteBucket('${esc(b)}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <button class="del-btn" onclick="deleteBucket('${esc(b)}')" title="Delete bucket"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>`;
     });
-    html += `<button class="add-row-btn" onclick="addBucket()">+ Add bucket</button>`;
+    html += `<div class="settings-actions">
+      <button class="add-row-btn" onclick="addBucket()">+ Add bucket</button>
+      <button class="defaults-btn" onclick="saveGlobalDefaults();this.textContent='Saved!';setTimeout(()=>this.textContent='Save as defaults',1500)">Save as defaults</button>
+      <button class="defaults-btn" onclick="resetToBuiltinDefaults()">Reset to factory</button>
+    </div>`;
   } else if (currentSettingsTab === 'priority') {
-    html += `<p class="settings-hint">I colori delle priorità influenzano le milestone (stelline) nella timeline.</p>`;
+    html += `<p class="settings-hint">Priority colors affect milestones (stars) in the timeline.</p>`;
     PRIORITY_OPTIONS.forEach(p => {
       const color = PRIORITY_COLORS[p] || DEFAULT_COLOR;
       html += `<div class="setting-row">
@@ -369,6 +384,10 @@ function renderSettingsBody() {
         <span class="setting-label">${esc(p)}</span>
       </div>`;
     });
+    html += `<div class="settings-actions">
+      <button class="defaults-btn" onclick="saveGlobalDefaults();this.textContent='Saved!';setTimeout(()=>this.textContent='Save as defaults',1500)">Save as defaults</button>
+      <button class="defaults-btn" onclick="resetToBuiltinDefaults()">Reset to factory</button>
+    </div>`;
   }
   body.innerHTML = html;
 }

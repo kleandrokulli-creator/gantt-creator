@@ -17,6 +17,7 @@ const DEFAULT_PROJECT_NAME = 'New Project';
 const STORAGE_KEY_PROJECTS = 'lvz-gantt-projects';
 const STORAGE_KEY_CURRENT = 'lvz-gantt-current';
 const STORAGE_KEY_THEME = 'lvz-gantt-theme';
+const STORAGE_KEY_DEFAULTS = 'lvz-gantt-defaults';
 
 // Timing (debounce/throttle)
 const DEBOUNCE_SAVE_MS = 500;

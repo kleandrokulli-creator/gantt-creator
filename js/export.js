@@ -741,7 +741,7 @@ async function doHTMLExport(btnEl) {
   });
 
   if (selectedL1.size === 0) {
-    alert('Select at least one item to export.');
+    showToast('Select at least one item to export.', 'warn');
     return;
   }
 
@@ -845,7 +845,7 @@ async function doHTMLExport(btnEl) {
     updateSaveIndicator('HTML exported (' + filteredTasks.length + ' tasks)');
   } catch (e) {
     console.error('HTML export error:', e);
-    alert('Export failed: ' + e.message);
+    showToast('Export failed: ' + e.message, 'error');
     btnEl.textContent = 'Export HTML';
     btnEl.disabled = false;
   }

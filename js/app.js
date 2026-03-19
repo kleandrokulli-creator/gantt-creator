@@ -37,10 +37,10 @@ document.addEventListener('drop', e => {
   if (file && /\.(xlsx|xls|csv|tsv)$/i.test(file.name)) handleFile(file);
 });
 
-function handleFile(file) {
+async function handleFile(file) {
   if (!file) return;
   if (allTasks.length > 0) {
-    if (!confirm('Loading a new file will replace all current tasks.\nContinue?')) {
+    if (!await showConfirm('Loading a new file will replace all current tasks.\nContinue?', { title: 'Load File', okLabel: 'Continue' })) {
       fileInput.value = '';
       return;
     }
@@ -59,14 +59,14 @@ function handleFile(file) {
       if (currentTab === 'dati') renderDataTable();
       scheduleSave();
     } catch (err) {
-      alert('Error parsing file: ' + err.message);
+      showToast('Error parsing file: ' + err.message, 'error', 6000);
       console.error(err);
     }
     DOM.loading.classList.remove('show');
     fileInput.value = '';
   };
   reader.onerror = () => {
-    alert('Failed to read file: ' + (reader.error?.message || 'Unknown error'));
+    showToast('Failed to read file: ' + (reader.error?.message || 'Unknown error'), 'error');
     DOM.loading.classList.remove('show');
     fileInput.value = '';
   };
@@ -126,7 +126,7 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
     else if (field === 'priority') { task.priority = el.value; }
     else if (field === 'dependsOn') {
       if (el.value && detectCircularDependency(task.id, el.value)) {
-        alert('Circular dependency detected. This dependency would create a cycle.');
+        showToast('Circular dependency detected. This would create a cycle.', 'error');
         el.value = task.dependsOn;
         return;
       }

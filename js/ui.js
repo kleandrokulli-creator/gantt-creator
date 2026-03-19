@@ -258,7 +258,7 @@ function saveEditPanel() {
   task.priority = document.getElementById('ep-priority').value;
   const newDepsVal = document.getElementById('ep-depends').value;
   if (newDepsVal && detectCircularDependency(task.id, newDepsVal)) {
-    alert('Circular dependency detected. This dependency would create a cycle.');
+    showToast('Circular dependency detected. This would create a cycle.', 'error');
     document.getElementById('ep-depends').value = task.dependsOn;
     return;
   }
@@ -333,7 +333,13 @@ function closeSettings() {
 function switchSettingsTab(tab) {
   currentSettingsTab = tab;
   document.querySelectorAll('#settings-modal .mtab').forEach(t => t.classList.toggle('active', t.dataset.stab === tab));
-  renderSettingsBody();
+  // Smooth crossfade between tabs
+  const body = DOM.settingsBody;
+  body.classList.add('switching');
+  setTimeout(() => {
+    renderSettingsBody();
+    body.classList.remove('switching');
+  }, 100);
 }
 
 function renderSettingsBody() {
@@ -408,8 +414,8 @@ function deleteLabel(name) {
   renderSettingsBody(); scheduleSave();
 }
 
-function addLabel() {
-  const name = prompt('New label name:');
+async function addLabel() {
+  const name = await showPrompt('Enter a name for the new label:', { title: 'New Label', placeholder: 'e.g. Business, IT, Testing...' });
   if (!name || !name.trim()) return;
   LABEL_COLORS[name.trim()] = '#64748B';
   renderSettingsBody(); scheduleSave();
@@ -440,8 +446,8 @@ function deleteBucket(name) {
   renderSettingsBody(); scheduleSave();
 }
 
-function addBucket() {
-  const name = prompt('Nome nuovo bucket:');
+async function addBucket() {
+  const name = await showPrompt('Enter a name for the new bucket:', { title: 'New Bucket', placeholder: 'e.g. Team A, Phase 1...' });
   if (!name || !name.trim()) return;
   customBuckets.add(name.trim());
   // Assign a random nice color
@@ -760,13 +766,17 @@ function switchTab(tab) {
   const gw = DOM.ganttWrapper;
   const dw = DOM.datiWrapper;
   if (tab === 'roadmap') {
+    gw.style.opacity = '0';
     gw.classList.add('active'); gw.classList.remove('hidden');
     dw.classList.remove('active');
     renderAll();
+    requestAnimationFrame(() => { gw.style.opacity = '1'; });
   } else {
+    dw.style.opacity = '0';
     gw.classList.remove('active'); gw.classList.add('hidden');
     dw.classList.add('active');
     renderDataTable();
+    requestAnimationFrame(() => { dw.style.opacity = '1'; });
   }
   
   const editBtn = document.getElementById('data-edit-btn');
@@ -1493,9 +1503,9 @@ function showAutoLinkResult(title, msg) {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-function deleteSelectedTasks() {
+async function deleteSelectedTasks() {
   if (!selectedRows.size) return;
-  if (!confirm(`Delete ${selectedRows.size} selected tasks?`)) return;
+  if (!await showConfirm(`Delete ${selectedRows.size} selected task(s)?`, { title: 'Delete Tasks', danger: true, okLabel: 'Delete' })) return;
   snapshotUndo();
   const toRemove = new Set(selectedRows);
   const selectedOutlines = allTasks.filter(t => selectedRows.has(t.id)).map(t => t.outline);
@@ -1512,8 +1522,8 @@ function deleteSelectedTasks() {
   scheduleSave();
 }
 
-function deleteTask(id) {
-  if (!confirm('Delete this task?')) return;
+async function deleteTask(id) {
+  if (!await showConfirm('Delete this task and all its sub-tasks?', { title: 'Delete Task', danger: true, okLabel: 'Delete' })) return;
   snapshotUndo();
   const task = allTasks.find(t => t.id === id);
   if (!task) return;
@@ -1555,15 +1565,15 @@ async function shareProject() {
     bytes.forEach(b => binary += String.fromCharCode(b));
     const b64 = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     if (b64.length > 32000) {
-      alert('Project is too large to share via URL. Use Excel export instead.');
+      showToast('Project is too large to share via URL. Use Excel export instead.', 'warn');
       return;
     }
     const url = location.origin + location.pathname + '#share=' + b64;
     await navigator.clipboard.writeText(url);
-    alert('Link copied to clipboard!\n\nShare it to let others view this project.');
+    showToast('Link copied to clipboard! Share it to let others view this project.', 'success', 5000);
   } catch (e) {
     console.error('Share failed:', e);
-    alert('Share error: ' + e.message);
+    showToast('Share error: ' + e.message, 'error');
   }
 }
 
@@ -1591,7 +1601,7 @@ async function loadFromURL() {
     return true;
   } catch (e) {
     console.error('Failed to load shared project:', e);
-    alert('Failed to load shared project. The link may be invalid or corrupted.');
+    showToast('Failed to load shared project. The link may be invalid or corrupted.', 'error', 6000);
     return false;
   }
 }
@@ -1641,11 +1651,11 @@ function exportCopyPNG() {
     backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
   }).then(canvas => {
     canvas.toBlob(blob => {
-      if (!blob) { alert('Failed to create image'); return; }
+      if (!blob) { showToast('Failed to create image', 'error'); return; }
       navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
-        updateSaveIndicator('PNG copied to clipboard');
+        showToast('PNG copied to clipboard', 'success');
       }).catch(() => {
-        alert('Could not copy to clipboard. Try downloading instead.');
+        showToast('Could not copy to clipboard. Try downloading instead.', 'warn');
       });
     }, 'image/png');
   });
@@ -2336,7 +2346,7 @@ function initKeyboardNav() {
           if (isLeaf) task.manualProgress = true;
         } else if (field === 'dependsOn') {
           if (val && detectCircularDependency(task.id, val)) {
-            alert('Circular dependency detected.');
+            showToast('Circular dependency detected.', 'error');
             td.innerHTML = origValue;
             td.classList.remove('cell-editing');
             return;

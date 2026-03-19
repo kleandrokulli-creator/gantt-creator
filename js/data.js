@@ -231,10 +231,10 @@ function switchProject(id) {
   loadProjectById(id);
 }
 
-function createNewProject(name) {
+async function createNewProject(name) {
   saveCurrentProjectToStorage();
   const id = generateId();
-  const pName = name || prompt('New project name:', DEFAULT_PROJECT_NAME);
+  const pName = name || await showPrompt('Enter a name for the new project:', { title: 'New Project', defaultValue: DEFAULT_PROJECT_NAME });
   if (pName === null) return;
 
   // Load global defaults for labels/buckets/priority (if saved)
@@ -325,23 +325,23 @@ function resetToBuiltinDefaults() {
   scheduleSave();
 }
 
-function renameCurrentProject() {
+async function renameCurrentProject() {
   if (!currentProjectId || !projects[currentProjectId]) return;
-  const newName = prompt('Rename project:', projects[currentProjectId].name);
+  const newName = await showPrompt('Rename project:', { title: 'Rename Project', defaultValue: projects[currentProjectId].name });
   if (!newName || !newName.trim()) return;
   projects[currentProjectId].name = newName.trim();
   renderProjectSelector();
   saveCurrentProjectToStorage();
 }
 
-function deleteCurrentProject() {
+async function deleteCurrentProject() {
   if (!currentProjectId) return;
   const ids = Object.keys(projects);
   if (ids.length <= 1) {
-    alert('Cannot delete the only project. Create another one first.');
+    showToast('Cannot delete the only project. Create another one first.', 'warn');
     return;
   }
-  if (!confirm('Delete project "' + (projects[currentProjectId]?.name || '') + '"?')) return;
+  if (!await showConfirm('Delete project "' + (projects[currentProjectId]?.name || '') + '"?', { title: 'Delete Project', danger: true, okLabel: 'Delete' })) return;
   delete projects[currentProjectId];
   const remaining = Object.keys(projects);
   currentProjectId = remaining[0];
@@ -525,7 +525,7 @@ function aggregateParentProgress() {
 function parseCSV(text, delimiter) {
   delimiter = delimiter || ',';
   const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) { alert('CSV file has no data rows.'); return; }
+  if (lines.length < 2) { showToast('CSV file has no data rows.', 'warn'); return; }
 
   const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
   const col = name => headers.findIndex(h => h.includes(name));

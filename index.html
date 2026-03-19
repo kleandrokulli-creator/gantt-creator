@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LVZ 3PC - Gantt Roadmap</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css?v=14">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
+</head>
+<body>
+
+<!-- DRAG & DROP OVERLAY -->
+<div class="drop-overlay" id="drop-overlay">
+  <div class="drop-label">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4m0 0L8 8m4-4l4 4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+    Drop Excel file here
+  </div>
+</div>
+
+<!-- HIDDEN FILE INPUT -->
+<input type="file" id="file-input" accept=".xlsx,.xls,.csv,.tsv" style="display:none">
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <span style="color:var(--grey-txt);font-size:.85rem">Processing...</span>
+</div>
+
+<!-- APP SCREEN -->
+<div id="app-screen">
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div class="logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 16h2v-4H7v4zM12 16h2V8h-2v8zM17 16h2v-6h-2v6z"/></svg> LVZ 3PC Gantt</div>
+    <div class="project-selector">
+      <select id="project-select" onchange="switchProject(this.value)" title="Select project"></select>
+      <button class="action-btn" onclick="createNewProject()" title="New project" aria-label="New project"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="action-btn" onclick="renameCurrentProject()" title="Rename project" aria-label="Rename project"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+      <button class="action-btn" onclick="deleteCurrentProject()" title="Delete project" aria-label="Delete project"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 002 2h10a2 2 0 002-2V6"/></svg></button>
+    </div>
+    <div class="project-info" id="project-info"></div>
+    <div class="actions">
+      <button class="theme-btn" onclick="toggleTheme()"><span id="theme-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span> Theme</button>
+      <button class="action-btn" onclick="shareProject()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Share</button>
+      <button class="action-btn" onclick="exportPNG()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg> PNG</button>
+      <button class="action-btn" onclick="triggerFileUpload()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Load Excel</button>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar" id="toolbar">
+    <div class="search-box" role="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" id="search-input" placeholder="Search tasks..." aria-label="Search tasks" oninput="applyFilters()">
+    </div>
+    <div class="sep"></div>
+    <select id="filter-label" aria-label="Filter by label" onchange="applyFilters()"><option value="">All labels</option></select>
+    <select id="filter-bucket" aria-label="Filter by bucket" onchange="applyFilters()"><option value="">All buckets</option></select>
+    <div class="sep tab-roadmap"></div>
+    <button onclick="setZoom('month')" id="zoom-month" class="active tab-roadmap">Month</button>
+    <button onclick="setZoom('week')" id="zoom-week" class="tab-roadmap">Week</button>
+    <button onclick="setZoom('day')" id="zoom-day" class="tab-roadmap">Day</button>
+    <div class="sep tab-roadmap"></div>
+    <select id="depth-select" class="tab-roadmap" onchange="setDepth(this.value)" title="Visible depth levels">
+      <option value="1" selected>Level 1</option>
+      <option value="2">Levels 1-2</option>
+      <option value="3">Levels 1-3</option>
+      <option value="0">All levels</option>
+    </select>
+    <button onclick="toggleMilestoneInline()" id="ms-inline-btn" class="btn-icon tab-roadmap" title="Milestone inline/separate">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+      <span id="ms-inline-label">MS Inline</span>
+    </button>
+    <button onclick="toggleArrows()" id="arrows-btn" class="btn-icon tab-roadmap" title="Toggle dependency arrows">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+      <span id="arrows-label">Hide Dependencies</span>
+    </button>
+    <div class="sep tab-roadmap"></div>
+    <button onclick="scrollToToday()" class="btn-icon tab-roadmap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      Today
+    </button>
+    <button onclick="toggleExpandAll()" id="expand-btn" class="btn-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
+      <span id="expand-label">Expand all</span>
+    </button>
+    <div class="sep"></div>
+    <button onclick="addNewTask()" class="btn-icon" title="Add task">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      Add task
+    </button>
+    <button onclick="deleteSelectedTasks()" id="btn-delete-sel" class="btn-icon" style="display:none" title="Delete selected">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 002 2h10a2 2 0 002-2V6"/></svg>
+      Delete selected
+    </button>
+    <button onclick="undoEdit()" class="btn-icon" id="btn-undo" title="Undo (Ctrl+Z)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h13a4 4 0 010 8H7M3 10l4-4M3 10l4 4"/></svg>
+      Undo
+    </button>
+    <button onclick="exportExcel()" class="btn-icon" title="Export Excel">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h2l2 3 2-3h2"/></svg>
+      Export
+    </button>
+    <button onclick="openSettings()" class="btn-icon" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Settings
+    </button>
+    <button onclick="showAllTasks()" id="btn-show-all" class="btn-icon" style="display:none" title="Unmute all tasks">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><path d="M1 1l22 22"/></svg>
+      Unmute All
+    </button>
+    <div class="sep"></div>
+    <span class="save-indicator" id="save-indicator"></span>
+  </div>
+
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <div class="tab active" data-tab="roadmap" onclick="switchTab('roadmap')">Roadmap</div>
+    <div class="tab" data-tab="dati" onclick="switchTab('dati')">Data</div>
+  </div>
+
+  <!-- GANTT -->
+  <div class="gantt-wrapper active" id="gantt-wrapper">
+    <div class="left-panel">
+      <div class="left-header" id="left-header-panel">
+        <div class="lh-top">
+          <span style="flex:1">Tasks</span>
+          <span style="font-size:.72rem;color:var(--grey-txt);font-weight:400" id="task-count"></span>
+        </div>
+        <div class="breadcrumb" id="breadcrumb"></div>
+      </div>
+      <div class="left-body" id="left-body"></div>
+    </div>
+    <div class="resizer" id="drag-resizer" title="Resize panel"></div>
+    <div class="right-panel">
+      <div class="timeline-header" id="timeline-header"></div>
+      <div class="timeline-body" id="timeline-body">
+        <div class="timeline-canvas" id="timeline-canvas"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA TABLE -->
+  <div id="dati-wrapper">
+    <div class="dati-header" id="dati-header">
+      <div class="dati-header-left">
+        <h2>Data Grid</h2>
+        <span id="dati-task-count" style="font-size:0.8rem;color:var(--grey-txt);margin-left:12px;"></span>
+      </div>
+      <div class="dati-header-actions">
+        <button onclick="toggleTableLayoutMode()" id="table-layout-btn" class="btn-col-picker" title="Fit: columns fill the page. Scroll: columns keep their width, horizontal scroll enabled.">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><path d="M18 8h3m0 0-3 3m3-3-3-3M6 8H3m0 0 3 3M3 8l3-3M12 3v18"/></svg>
+          <span>Fit</span>
+        </button>
+        <button onclick="toggleColumnPicker()" id="col-picker-btn" class="btn-col-picker" title="Show/hide columns">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Columns
+        </button>
+        <div class="col-picker-dropdown" id="col-picker-dropdown"></div>
+        <button onclick="toggleDataEditMode()" id="data-edit-btn" class="btn-edit-mode" title="Enable full editing of data table">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span id="data-edit-label">Enable Edit</span>
+        </button>
+      </div>
+    </div>
+    <div class="dati-table-container">
+      <table class="data-table" id="data-table">
+        <thead><tr id="dt-header"></tr></thead>
+        <tbody id="dt-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- TOOLTIP -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- SIDE EDIT PANEL -->
+<div class="edit-panel-overlay" id="edit-panel-overlay">
+  <div class="backdrop" onclick="closeEditPanel()"></div>
+  <div class="edit-panel" id="edit-panel"></div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button class="modal-close" onclick="closeSettings()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-tabs">
+      <div class="mtab active" data-stab="labels" onclick="switchSettingsTab('labels')">Labels</div>
+      <div class="mtab" data-stab="buckets" onclick="switchSettingsTab('buckets')">Buckets</div>
+      <div class="mtab" data-stab="priority" onclick="switchSettingsTab('priority')">Priority</div>
+    </div>
+    <div class="modal-body" id="settings-body"></div>
+  </div>
+</div>
+
+<!-- SCRIPTS (order matters: state → utils → data → render → ui → app) -->
+<script src="js/state.js?v=14"></script>
+<script src="js/utils.js?v=14"></script>
+<script src="js/data.js?v=14"></script>
+<script src="js/render.js?v=14"></script>
+<script src="js/ui.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
+
+</body>
+</html>

@@ -991,6 +991,16 @@ ${_getMinimalUICode()}
 <script>
 // === INIT ===
 (function() {
+  // Initialize DOM cache (required by all render functions)
+  initDOMCache();
+  // Provide no-op elements for DOM refs that don't exist in read-only mode
+  const _noop = document.createElement('div');
+  ['projectSelect','projectInfo','saveIndicator','settingsBody',
+   'datiWrapper','dtHeader','dtBody','btnDeleteSel','btnShowAll',
+   'loading','dropOverlay','fileInput'].forEach(k => {
+    if (!DOM[k]) DOM[k] = _noop;
+  });
+
   // Restore embedded state
   const d = __EMBEDDED_DATA__;
   Object.assign(BUCKET_COLORS, d.bucketColors || {});

@@ -1090,6 +1090,21 @@ function saveEditPanel() {}
 function openSettings() {}
 function closeSettings() {}
 function triggerFileUpload() {}
+function addNewTask() {}
+function loadTemplate() {}
+function insertTaskBelow() {}
+function openDataLabelPicker() {}
+function toggleSelectAll() {}
+function updateShowAllBtn() {}
+function handleTaskRowClick(e, outline, taskId, hasChildren) {
+  var arrow = e.target.closest('.arrow');
+  if (arrow && !arrow.classList.contains('hidden')) { toggleExpand(outline); }
+}
+function toggleTaskVisibility(taskId) {
+  if (hiddenTasks.has(taskId)) hiddenTasks.delete(taskId);
+  else hiddenTasks.add(taskId);
+  renderAll();
+}
 function handleBarClick(id, hasChildren) { if (hasChildren) navigateInto(id); }
 let tooltipTimeout;
 function showTooltip(e, id) {

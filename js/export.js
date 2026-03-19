@@ -1091,28 +1091,43 @@ function openSettings() {}
 function closeSettings() {}
 function triggerFileUpload() {}
 function handleBarClick(id, hasChildren) { if (hasChildren) navigateInto(id); }
+let tooltipTimeout;
 function showTooltip(e, id) {
-  const t = allTasks.find(x => x.id === id);
-  if (!t) return;
-  const tip = document.getElementById('tooltip');
-  const pct = Math.round(t.percentComplete * 100);
-  let html = '<strong>' + (t.name||'') + '</strong>';
-  if (t.start) html += '<br>' + fmtDate(t.start) + (t.finish ? ' - ' + fmtDate(t.finish) : '');
-  html += '<br>' + pct + '% complete';
-  if (t.bucket) html += '<br>Bucket: ' + t.bucket;
-  if (t.labels && t.labels.length) html += '<br>Labels: ' + t.labels.join(', ');
-  tip.innerHTML = html;
-  tip.style.display = 'block';
-  tip.style.left = e.pageX + 12 + 'px';
-  tip.style.top = e.pageY + 12 + 'px';
+  const task = allTasks.find(x => x.id === id);
+  if (!task) return;
+  clearTimeout(tooltipTimeout);
+  const pct = Math.round(task.percentComplete * 100);
+  let html = '<div class="tt-name" style="color:' + (task.color || '#64748B') + '">' + esc(task.name) + '</div>';
+  html += '<div class="tt-row"><span class="tt-label">Start:</span><span>' + (task.start ? fmtDate(task.start) : '—') + '</span></div>';
+  html += '<div class="tt-row"><span class="tt-label">End:</span><span>' + (task.finish ? fmtDate(task.finish) : '—') + '</span></div>';
+  html += '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + (task.duration || '—') + '</span></div>';
+  html += '<div class="tt-row"><span class="tt-label">Complete:</span><span>' + pct + '%</span></div>';
+  html += '<div class="tt-progress"><div class="fill" style="width:' + pct + '%;background:' + (task.color || '#64748B') + '"></div></div>';
+  if (task.labels && task.labels.length) {
+    html += '<div class="tt-tags">';
+    task.labels.forEach(function(l) {
+      var c = LABEL_COLORS[l] || '#64748B';
+      html += '<span class="tt-tag" style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44">' + esc(l) + '</span>';
+    });
+    html += '</div>';
+  }
+  if (task.bucket) html += '<div class="tt-row" style="margin-top:.3rem"><span class="tt-label">Bucket:</span><span>' + esc(task.bucket) + '</span></div>';
+  if (task.priority) html += '<div class="tt-row"><span class="tt-label">Priority:</span><span>' + esc(task.priority) + '</span></div>';
+  if (task.dependsOn) html += '<div class="tt-row"><span class="tt-label">Depends on:</span><span>' + esc(task.dependsOn) + '</span></div>';
+  DOM.tooltip.innerHTML = html;
+  DOM.tooltip.classList.add('visible');
+  moveTooltip(e);
 }
 function moveTooltip(e) {
-  const tip = document.getElementById('tooltip');
-  tip.style.left = e.pageX + 12 + 'px';
-  tip.style.top = e.pageY + 12 + 'px';
+  var x = e.clientX + 12, y = e.clientY + 12;
+  var rect = DOM.tooltip.getBoundingClientRect();
+  if (x + 320 > window.innerWidth) x = e.clientX - 320;
+  if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - 8;
+  DOM.tooltip.style.left = x + 'px';
+  DOM.tooltip.style.top = y + 'px';
 }
 function hideTooltip() {
-  document.getElementById('tooltip').style.display = 'none';
+  tooltipTimeout = setTimeout(function() { DOM.tooltip.classList.remove('visible'); }, 100);
 }
 
 function navigateInto(taskId) {

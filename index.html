@@ -86,6 +86,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
       <span id="expand-label">Expand all</span>
     </button>
+    <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon tab-roadmap" title="Show/hide legend">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Legend
+    </button>
     <div class="sep"></div>
     <button onclick="addNewTask()" class="btn-icon" title="Add task">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
@@ -156,12 +160,10 @@
         <div class="timeline-canvas" id="timeline-canvas"></div>
       </div>
     </div>
-    <!-- LEGEND -->
-    <div class="legend-panel" id="legend-panel"></div>
-    <button class="legend-toggle" id="legend-toggle" onclick="toggleLegend()" title="Show/hide legend">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Legend
-    </button>
+  </div>
+  <!-- LEGEND BAR (below gantt) -->
+  <div class="legend-bar" id="legend-bar">
+    <div class="legend-content" id="legend-content"></div>
   </div>
 
   <!-- DATA TABLE -->

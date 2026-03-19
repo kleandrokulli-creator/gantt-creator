@@ -168,54 +168,61 @@ let legendOpen = false;
 
 function toggleLegend() {
   legendOpen = !legendOpen;
-  const panel = document.getElementById('legend-panel');
+  const bar = document.getElementById('legend-bar');
   const btn = document.getElementById('legend-toggle');
+  if (!bar || !btn) return;
   if (legendOpen) {
     renderLegend();
-    panel.classList.add('open');
+    bar.classList.add('open');
     btn.classList.add('active');
   } else {
-    panel.classList.remove('open');
+    bar.classList.remove('open');
     btn.classList.remove('active');
   }
 }
 
 function renderLegend() {
-  const panel = document.getElementById('legend-panel');
-  if (!panel) return;
+  const container = document.getElementById('legend-content');
+  if (!container) return;
   let html = '';
 
-  // Labels section
+  // Labels
   const labelEntries = Object.entries(LABEL_COLORS);
   if (labelEntries.length > 0) {
-    html += '<div class="legend-section"><div class="legend-section-title">Labels</div><div class="legend-items">';
+    html += '<div class="legend-section"><span class="legend-section-title">Labels:</span>';
     labelEntries.forEach(([name, color]) => {
       html += `<span class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(name)}</span>`;
     });
-    html += '</div></div>';
+    html += '</div>';
   }
 
-  // Buckets section
-  const bucketEntries = Object.entries(BUCKET_COLORS);
+  // Buckets (only those actually used by tasks)
+  const usedBuckets = new Set();
+  allTasks.forEach(t => { if (t.bucket) usedBuckets.add(t.bucket); });
+  const bucketEntries = Object.entries(BUCKET_COLORS).filter(([name]) => usedBuckets.has(name));
   if (bucketEntries.length > 0) {
-    html += '<div class="legend-section"><div class="legend-section-title">Buckets</div><div class="legend-items">';
+    html += '<div class="legend-section"><span class="legend-section-title">Buckets:</span>';
     bucketEntries.forEach(([name, color]) => {
       html += `<span class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(name)}</span>`;
     });
-    html += '</div></div>';
+    html += '</div>';
   }
 
-  // Priority / Milestone colors
-  if (PRIORITY_OPTIONS.length > 0) {
-    html += '<div class="legend-section"><div class="legend-section-title">Priority (milestone color)</div><div class="legend-items">';
-    PRIORITY_OPTIONS.forEach(p => {
-      const color = PRIORITY_COLORS[p] || DEFAULT_COLOR;
-      html += `<span class="legend-item"><span class="legend-star">${starSVG(12, color)}</span>${esc(p)}</span>`;
-    });
-    html += '</div></div>';
-  }
+  // Priority / Milestones
+  html += '<div class="legend-section"><span class="legend-section-title">Milestones:</span>';
+  PRIORITY_OPTIONS.forEach(p => {
+    const color = PRIORITY_COLORS[p] || DEFAULT_COLOR;
+    html += `<span class="legend-item"><span class="legend-star">${starSVG(10, color)}</span>${esc(p)}</span>`;
+  });
+  html += '</div>';
 
-  panel.innerHTML = html;
+  container.innerHTML = html;
+}
+
+// Auto-refresh legend when settings change
+const _origRenderSettingsBody = typeof renderSettingsBody === 'function' ? null : null;
+function refreshLegendIfOpen() {
+  if (legendOpen) renderLegend();
 }
 
 
@@ -333,12 +340,12 @@ function saveEditPanel() {
   task.effort = document.getElementById('ep-effort').value;
   task.notes = document.getElementById('ep-notes').value;
 
-  // Color override - clear if it matches the new auto color
+  // Color override - clear if it matches the new auto color (case-insensitive hex compare)
   const epColor = document.getElementById('ep-color');
   if (epColor) {
     const autoColor = (task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
       : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR);
-    task.colorOverride = (epColor.value !== autoColor) ? epColor.value : '';
+    task.colorOverride = (epColor.value.toLowerCase() !== autoColor.toLowerCase()) ? epColor.value : '';
   }
 
   rebuildAfterChange();
@@ -463,6 +470,7 @@ function renderSettingsBody() {
     </div>`;
   }
   body.innerHTML = html;
+  refreshLegendIfOpen();
 }
 
 function renameLabel(oldName, newName) {

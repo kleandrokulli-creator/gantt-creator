@@ -74,12 +74,13 @@ function openEditPanel(taskId) {
       <textarea id="ep-notes">${esc(task.notes || '')}</textarea>
     </div>
     <div class="ep-field">
-      <label>Colore barra <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">(override)</span></label>
+      <label>Bar color <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">${task.colorOverride ? '(overridden)' : '(automatic)'}</span></label>
       <div class="ep-color-row">
-        <span class="ep-color-auto" style="background:${task.bucket && BUCKET_COLORS[task.bucket] ? BUCKET_COLORS[task.bucket] : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)}" title="Colore automatico"></span>
+        <span class="ep-color-auto" style="background:${task.bucket && BUCKET_COLORS[task.bucket] ? BUCKET_COLORS[task.bucket] : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)}" title="Automatic color (from labels/bucket)"></span>
         <input type="color" id="ep-color" value="${task.colorOverride || task.color || DEFAULT_COLOR}" class="ep-color-picker ${task.colorOverride ? 'active' : ''}">
-        <button class="ep-color-reset" onclick="resetTaskColor()" title="Ripristina colore automatico">
+        <button class="ep-color-reset ${task.colorOverride ? '' : 'u-hidden'}" onclick="resetTaskColor()" title="Reset to automatic color">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+          Reset
         </button>
       </div>
     </div>
@@ -146,11 +147,77 @@ function resetTaskColor() {
   if (!task) return;
   task.colorOverride = '';
   reassignColors();
+  // Update the color picker UI
   const epColor = document.getElementById('ep-color');
-  if (epColor) epColor.value = task.color;
+  if (epColor) {
+    epColor.value = task.color || DEFAULT_COLOR;
+    epColor.classList.remove('active');
+  }
+  // Update the auto-color circle
+  const autoCircle = document.querySelector('.ep-color-auto');
+  if (autoCircle) autoCircle.style.background = task.color || DEFAULT_COLOR;
+  showToast('Color reset to automatic', 'success', 2000);
   renderAll();
   scheduleSave();
 }
+
+
+/* ---------- LEGEND ---------- */
+
+let legendOpen = false;
+
+function toggleLegend() {
+  legendOpen = !legendOpen;
+  const panel = document.getElementById('legend-panel');
+  const btn = document.getElementById('legend-toggle');
+  if (legendOpen) {
+    renderLegend();
+    panel.classList.add('open');
+    btn.classList.add('active');
+  } else {
+    panel.classList.remove('open');
+    btn.classList.remove('active');
+  }
+}
+
+function renderLegend() {
+  const panel = document.getElementById('legend-panel');
+  if (!panel) return;
+  let html = '';
+
+  // Labels section
+  const labelEntries = Object.entries(LABEL_COLORS);
+  if (labelEntries.length > 0) {
+    html += '<div class="legend-section"><div class="legend-section-title">Labels</div><div class="legend-items">';
+    labelEntries.forEach(([name, color]) => {
+      html += `<span class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(name)}</span>`;
+    });
+    html += '</div></div>';
+  }
+
+  // Buckets section
+  const bucketEntries = Object.entries(BUCKET_COLORS);
+  if (bucketEntries.length > 0) {
+    html += '<div class="legend-section"><div class="legend-section-title">Buckets</div><div class="legend-items">';
+    bucketEntries.forEach(([name, color]) => {
+      html += `<span class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(name)}</span>`;
+    });
+    html += '</div></div>';
+  }
+
+  // Priority / Milestone colors
+  if (PRIORITY_OPTIONS.length > 0) {
+    html += '<div class="legend-section"><div class="legend-section-title">Priority (milestone color)</div><div class="legend-items">';
+    PRIORITY_OPTIONS.forEach(p => {
+      const color = PRIORITY_COLORS[p] || DEFAULT_COLOR;
+      html += `<span class="legend-item"><span class="legend-star">${starSVG(12, color)}</span>${esc(p)}</span>`;
+    });
+    html += '</div></div>';
+  }
+
+  panel.innerHTML = html;
+}
+
 
 function toggleEpTag(el, label) {
   el.classList.toggle('selected');

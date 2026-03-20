@@ -278,6 +278,15 @@ function renderLegend() {
   });
   html += '</div>';
 
+  // Dependencies legend
+  html += '<div class="legend-section"><span class="legend-section-title">Dipendenze:</span>';
+  html += '<span class="legend-item"><strong style="font-family:monospace">FS</strong> Finish-to-Start (default)</span>';
+  html += '<span class="legend-item"><strong style="font-family:monospace">SS</strong> Start-to-Start</span>';
+  html += '<span class="legend-item"><strong style="font-family:monospace">FF</strong> Finish-to-Finish</span>';
+  html += '<span class="legend-item"><strong style="font-family:monospace">SF</strong> Start-to-Finish</span>';
+  html += '<span class="legend-item" style="font-style:italic;color:var(--grey-txt)">Lag: +Nd / -Nd (es. 1FS+2d)</span>';
+  html += '</div>';
+
   container.innerHTML = html;
 }
 
@@ -411,6 +420,17 @@ function saveEditPanel() {
   const durationManuallyChanged = newDurDays !== oldDurDays;
 
   const datesChanged = (newStart?.getTime() !== task.start?.getTime()) || (newFinish?.getTime() !== task.finish?.getTime());
+  if (datesChanged && task.dependsOn) {
+    const deps = parseDependency(task.dependsOn);
+    const startChanged = newStart?.getTime() !== task.start?.getTime();
+    const finishChanged = newFinish?.getTime() !== task.finish?.getTime();
+    if (startChanged && deps.some(d => d.type === 'FS' || d.type === 'SS')) {
+      showToast('Questo task ha dipendenze che vincolano la data di inizio. Modifica o rimuovi la dipendenza per evitare conflitti.', 'warn', 4000);
+    }
+    if (finishChanged && deps.some(d => d.type === 'FF' || d.type === 'SF')) {
+      showToast('Questo task ha dipendenze che vincolano la data di fine. Modifica o rimuovi la dipendenza per evitare conflitti.', 'warn', 4000);
+    }
+  }
   task.start = newStart;
 
   if (durationManuallyChanged && newStart && newDurDays > 0) {
@@ -461,6 +481,7 @@ function saveEditPanel() {
     }
   }
   task.dependsOn = newDepsVal;
+  applyOwnDependencies(task);
   task.effort = document.getElementById('ep-effort').value;
   task.notes = document.getElementById('ep-notes').value;
 
@@ -1849,17 +1870,6 @@ function insertTaskBelow(refTaskId) {
   const newOutline = parentOutline ? parentOutline + '.' + (siblingNum + 1) : String(siblingNum + 1);
   const depth = refTask.depth;
 
-  // Check: does the task BELOW the insertion point depend on refTask?
-  const belowTask = insertIdx < allTasks.length ? allTasks[insertIdx] : null;
-  let chainDetected = false;
-  let chainDep = null;
-
-  if (belowTask) {
-    const deps = parseDependency(belowTask.dependsOn);
-    chainDep = deps.find(d => d.taskNum === refTask.taskNumber);
-    if (chainDep) chainDetected = true;
-  }
-
   // Create the new task
   const maxId = allTasks.reduce((m, t) => Math.max(m, t.id), 0);
   const now = new Date(); now.setHours(0, 0, 0, 0);
@@ -1870,13 +1880,8 @@ function insertTaskBelow(refTaskId) {
     labels: [...(refTask.labels || [])], bucket: refTask.bucket || ''
   });
 
-  if (chainDetected && belowTask) {
-    // Show dependency chain dialog
-    showDepChainDialog(refTask, belowTask, newTask, chainDep, insertIdx);
-  } else {
-    // No chain — show simple insert dialog
-    showSimpleInsertDialog(refTask, belowTask, newTask, insertIdx);
-  }
+  // Insert task directly without dependency dialog
+  doInsertTask(newTask, insertIdx);
 }
 
 function showSimpleInsertDialog(refTask, belowTask, newTask, insertIdx) {

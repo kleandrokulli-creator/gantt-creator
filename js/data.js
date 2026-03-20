@@ -928,6 +928,26 @@ function propagateDependencies(changedTask) {
   }
 }
 
+/**
+ * Apply dependency constraints TO this task based on its dependsOn field.
+ * Called when dependsOn is edited to auto-link dates to predecessors.
+ */
+function applyOwnDependencies(task) {
+  if (!task.dependsOn) return;
+  const deps = parseDependency(task.dependsOn);
+  const taskByNum = new Map();
+  allTasks.forEach(t => taskByNum.set(t.taskNumber, t));
+  let changed = false;
+  for (const dep of deps) {
+    const pred = taskByNum.get(dep.taskNum);
+    if (pred) {
+      if (applyDependencyConstraint(task, dep, pred)) changed = true;
+    }
+  }
+  if (changed) recalcDuration(task);
+  propagateDependencies(task);
+}
+
 /** Apply a single dependency constraint. Returns true if dates changed. */
 function applyDependencyConstraint(task, dep, predecessor) {
   if (!predecessor.start && !predecessor.finish) return false;

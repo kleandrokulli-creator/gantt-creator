@@ -945,6 +945,7 @@ async function doHTMLExport(btnEl) {
       showArrows: showArrows,
       currentZoom: currentZoom,
       workingDaysMode: workingDaysMode,
+      calendars: JSON.parse(JSON.stringify(calendars)),
     };
 
     const projectName = projects[currentProjectId]?.name || 'Roadmap';
@@ -1169,6 +1170,7 @@ ${_getMinimalUICode()}
   currentZoom = d.currentZoom || 'month';
   workingDaysMode = d.workingDaysMode || false;
   projectMeta = d.projectMeta || {};
+  if (d.calendars) { calendars = d.calendars; invalidateHolidayCache(); }
 
   // Deserialize tasks
   allTasks = (d.tasks || []).map(s => ({
@@ -1325,19 +1327,7 @@ function getCurrentScope() {
   const t = allTasks.find(x => x.id === last.taskId);
   return t ? (t.filteredChildren || t.children) : taskTree;
 }
-function countWorkingDays(start, end) {
-  if (!start || !end) return 0;
-  var count = 0, d = new Date(start);
-  d.setHours(0,0,0,0);
-  var endTime = new Date(end).setHours(0,0,0,0);
-  while (d.getTime() < endTime) {
-    var day = d.getDay();
-    if (day !== 0 && day !== 6) count++;
-    d.setDate(d.getDate() + 1);
-  }
-  return Math.max(count, 1);
-}
-function isWeekend(date) { var d = date.getDay(); return d === 0 || d === 6; }
+// countWorkingDays and isWeekend are provided by utils.js (calendar-aware)
 function _smartDatePadding(dMin, dMax) {
   var mn = new Date(dMin), mx = new Date(dMax);
   if (currentZoom === 'day') {
@@ -1434,11 +1424,13 @@ function toggleWorkingDays() {
   workingDaysMode = !workingDaysMode;
   var btn = document.getElementById('working-days-btn');
   if (btn) btn.classList.toggle('active', workingDaysMode);
+  var defaultCalId = typeof getDefaultCalendarId === 'function' ? getDefaultCalendarId() : null;
   allTasks.forEach(function(t) {
     if (t.start && t.finish) {
       var days;
       if (workingDaysMode) {
-        days = countWorkingDays(t.start, t.finish);
+        var calId = t.calendarId || defaultCalId;
+        days = countWorkingDays(t.start, t.finish, calId);
         if (t.isMilestone) days = 0;
       } else {
         var raw = Math.round((t.finish - t.start) / 86400000);

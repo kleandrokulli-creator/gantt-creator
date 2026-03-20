@@ -553,6 +553,27 @@ function recalcDuration(task) {
   }
 }
 
+/**
+ * Recalculate finish dates after holidays change.
+ * Preserves each leaf task's working-day duration and extends/shrinks
+ * the finish date to skip newly added holidays. Then propagates dependencies.
+ */
+function recalcFinishDates() {
+  if (!workingDaysMode) return;
+  allTasks.forEach(task => {
+    if (!task.start || task.isMilestone) return;
+    if (task.children && task.children.length > 0) return; // parents aggregate from children
+    const workDays = parseInt(task.duration) || 0;
+    if (workDays <= 0) return;
+    const calId = task.calendarId || getDefaultCalendarId();
+    task.finish = addWorkingDays(task.start, workDays, calId);
+    task.duration = workDays + (workDays === 1 ? ' day' : ' days');
+  });
+  allTasks.forEach(task => {
+    if (task.dependsOn) propagateDependencies(task);
+  });
+}
+
 /** Helper: rebuild all derived data after a change */
 function rebuildAfterChange() {
   buildTree();

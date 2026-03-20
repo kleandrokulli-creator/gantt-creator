@@ -126,7 +126,7 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
     else if (field === 'cost') { task.cost = el.value; }
     else if (field === 'sprint') { task.sprint = el.value; }
     else if (field === 'category') { task.category = el.value; }
-    else if (field === 'calendarId') { assignCalendarWithChildren(task, el.value); invalidateHolidayCache(); allTasks.forEach(t => recalcDuration(t)); }
+    else if (field === 'calendarId') { assignCalendarWithChildren(task, el.value); invalidateHolidayCache(); recalcFinishDates(); }
     else if (field === 'duration') {
       const newDays = parseInt(el.value) || 0;
       if (newDays > 0 && task.start) {

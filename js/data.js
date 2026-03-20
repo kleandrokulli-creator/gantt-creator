@@ -586,7 +586,13 @@ function recalcDuration(task) {
   if (task.start && task.finish) {
     let days;
     if (workingDaysMode) {
-      const calId = task.calendarId || getDefaultCalendarId();
+      // For parent tasks: use children's calendar if parent has none assigned
+      let calId = task.calendarId || getDefaultCalendarId();
+      if (task.children && task.children.length > 0) {
+        // Find the first child with a calendar, or use default
+        const childWithCal = task.children.find(c => c.calendarId);
+        if (childWithCal) calId = childWithCal.calendarId;
+      }
       days = countWorkingDays(task.start, task.finish, calId);
       if (task.isMilestone) days = 0;
       if (days === 0 && !task.isMilestone) days = 1;

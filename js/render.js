@@ -751,7 +751,10 @@ function renderDataTable() {
   }
   if (isDataEditMode) stickyNameLeft += 28; // drag handle width
   const table = document.getElementById('data-table');
-  if (table) table.style.setProperty('--sticky-name-left', stickyNameLeft + 'px');
+  if (table) {
+    table.style.setProperty('--sticky-name-left', stickyNameLeft + 'px');
+    table.classList.toggle('edit-mode-active', isDataEditMode);
+  }
 
   let hhtml = '';
   // Drag handle header
@@ -761,7 +764,7 @@ function renderDataTable() {
     // Multi-sort: find this column in sortColumns array
     const sortEntry = sortColumns.find(s => s.col === si);
     const sortIdx = sortEntry ? sortColumns.indexOf(sortEntry) : -1;
-    const sortable = si ? `onclick="sortTable(${si}, event)"` : '';
+    const sortable = si ? `oncontextmenu="event.preventDefault();sortTable(${si}, event)"` : '';
     let arrow = '';
     if (sortEntry) {
       arrow = `<span class="sort-arrow ${sortEntry.dir}"></span>`;
@@ -785,7 +788,8 @@ function renderDataTable() {
         hhtml += `<th data-col-id="select" ${wStyle}>${resizeHandle}</th>`;
       }
     } else {
-      hhtml += `<th data-col-id="${col.id}" ${wStyle} ${sortable} ${dragAttr}>${col.label}${arrow}${filterIcon}${resizeHandle}</th>`;
+      const sortTitle = si ? ' title="Tasto destro per ordinare"' : '';
+      hhtml += `<th data-col-id="${col.id}" ${wStyle} ${sortable} ${dragAttr}${sortTitle}><span class="th-content"><span class="th-label">${col.label}</span>${arrow}${filterIcon}</span>${resizeHandle}</th>`;
     }
   });
   headerTr.innerHTML = hhtml;

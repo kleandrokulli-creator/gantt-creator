@@ -119,6 +119,7 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
         return;
       }
       task.dependsOn = el.value;
+      applyOwnDependencies(task);
     }
     else if (field === 'effort') { task.effort = el.value; }
     else if (field === 'notes') { task.notes = el.value; }
@@ -211,6 +212,12 @@ document.getElementById('dt-body').addEventListener('change', function (e) {
     el.classList.remove('dt-cell-invalid');
     if (finishEl) finishEl.classList.remove('dt-cell-invalid');
     task.start = newStart;
+    if (task.dependsOn) {
+      const deps = parseDependency(task.dependsOn);
+      if (deps.some(d => d.type === 'FS' || d.type === 'SS')) {
+        showToast('Questo task ha dipendenze che vincolano la data di inizio. Modifica o rimuovi la dipendenza per evitare conflitti.', 'warn', 4000);
+      }
+    }
     recalcDuration(task);
     propagateDependencies(task);
   } else if (field === 'finish') {
@@ -226,6 +233,12 @@ document.getElementById('dt-body').addEventListener('change', function (e) {
     el.classList.remove('dt-cell-invalid');
     if (startEl) startEl.classList.remove('dt-cell-invalid');
     task.finish = newFinish;
+    if (task.dependsOn) {
+      const deps = parseDependency(task.dependsOn);
+      if (deps.some(d => d.type === 'FF' || d.type === 'SF')) {
+        showToast('Questo task ha dipendenze che vincolano la data di fine. Modifica o rimuovi la dipendenza per evitare conflitti.', 'warn', 4000);
+      }
+    }
     recalcDuration(task);
     propagateDependencies(task);
   } else if (field === 'bucket') task.bucket = el.value;

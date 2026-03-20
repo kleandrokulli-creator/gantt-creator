@@ -414,7 +414,8 @@ function renderTimelineBars(dpx) {
   }
 
   // Holiday shading (scoped to current view's calendars, bridged weekends)
-  if (workingDaysMode && Object.keys(calendars).length > 0) {
+  // Always show holiday shading regardless of workingDaysMode
+  if (Object.keys(calendars).length > 0) {
     const scopedHolidays = buildScopedHolidayLookup();
     const bridgedWeekends = buildScopedBridgedWeekends();
     const dayW = dpx[currentZoom];

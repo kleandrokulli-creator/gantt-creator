@@ -232,6 +232,31 @@ function renderCalendarSettingsHTML() {
       </div>
     </div>`;
 
+    // Import national holidays preset
+    html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="cal-preset-country" style="flex:1;padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:.8rem">
+          <option value="">-- Import national holidays --</option>
+          <option value="IT">Italia</option>
+          <option value="UK">United Kingdom</option>
+          <option value="DE">Deutschland</option>
+          <option value="FR">France</option>
+          <option value="ES">Espana</option>
+          <option value="US">United States</option>
+          <option value="NL">Nederland</option>
+          <option value="PT">Portugal</option>
+          <option value="AT">Osterreich</option>
+          <option value="BE">Belgique</option>
+        </select>
+        <select id="cal-preset-year" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:.8rem">
+          <option value="2025">2025</option>
+          <option value="2026" selected>2026</option>
+          <option value="2027">2027</option>
+        </select>
+        <button class="add-row-btn" onclick="importNationalHolidays('${_selectedCalId}')" style="white-space:nowrap">Import</button>
+      </div>
+    </div>`;
+
     html += `</div>`;
   }
   return html;
@@ -310,7 +335,15 @@ function submitCalendarHoliday(calId) {
   const dateEl = document.getElementById('cal-h-date');
   const labelEl = document.getElementById('cal-h-label');
   if (!dateEl.value) { showToast('Select a date', 'error'); return; }
+  // Validate: duplicate check
+  const existing = calendars[calId].entries.find(e => e.type === 'holiday' && e.date === dateEl.value);
+  if (existing) { showToast('This date is already in the calendar (' + existing.label + ')', 'warn'); return; }
+  // Validate: weekend warning
+  const hDate = new Date(dateEl.value + 'T00:00:00');
+  if (isWeekend(hDate)) { showToast('Note: this date falls on a weekend', 'warn'); }
   calendars[calId].entries.push({ type: 'holiday', date: dateEl.value, label: labelEl.value || 'Holiday' });
+  // Keep entries sorted by date
+  calendars[calId].entries.sort((a, b) => (a.date || a.startDate || '').localeCompare(b.date || b.startDate || ''));
   invalidateHolidayCache();
   recalcFinishDates();
   renderSettingsBody();
@@ -442,4 +475,449 @@ function applyCalendarAssignment() {
   scheduleSave();
   closeCalendarAssignModal();
   showToast(`Calendar assigned to ${checked.length} phase(s)`, 'info', 2000);
+}
+
+
+/* ---------- NATIONAL HOLIDAY PRESETS ---------- */
+const NATIONAL_HOLIDAYS = {
+  IT: {
+    2025: [
+      { date: '2025-01-01', label: 'Capodanno' },
+      { date: '2025-01-06', label: 'Epifania' },
+      { date: '2025-04-20', label: 'Pasqua' },
+      { date: '2025-04-21', label: 'Lunedi Angelo' },
+      { date: '2025-04-25', label: 'Liberazione' },
+      { date: '2025-05-01', label: 'Festa del Lavoro' },
+      { date: '2025-06-02', label: 'Festa della Repubblica' },
+      { date: '2025-08-15', label: 'Ferragosto' },
+      { date: '2025-11-01', label: 'Ognissanti' },
+      { date: '2025-12-08', label: 'Immacolata Concezione' },
+      { date: '2025-12-25', label: 'Natale' },
+      { date: '2025-12-26', label: 'Santo Stefano' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Capodanno' },
+      { date: '2026-01-06', label: 'Epifania' },
+      { date: '2026-04-05', label: 'Pasqua' },
+      { date: '2026-04-06', label: 'Lunedi Angelo' },
+      { date: '2026-04-25', label: 'Liberazione' },
+      { date: '2026-05-01', label: 'Festa del Lavoro' },
+      { date: '2026-06-02', label: 'Festa della Repubblica' },
+      { date: '2026-08-15', label: 'Ferragosto' },
+      { date: '2026-11-01', label: 'Ognissanti' },
+      { date: '2026-12-08', label: 'Immacolata Concezione' },
+      { date: '2026-12-25', label: 'Natale' },
+      { date: '2026-12-26', label: 'Santo Stefano' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Capodanno' },
+      { date: '2027-01-06', label: 'Epifania' },
+      { date: '2027-03-28', label: 'Pasqua' },
+      { date: '2027-03-29', label: 'Lunedi Angelo' },
+      { date: '2027-04-25', label: 'Liberazione' },
+      { date: '2027-05-01', label: 'Festa del Lavoro' },
+      { date: '2027-06-02', label: 'Festa della Repubblica' },
+      { date: '2027-08-15', label: 'Ferragosto' },
+      { date: '2027-11-01', label: 'Ognissanti' },
+      { date: '2027-12-08', label: 'Immacolata Concezione' },
+      { date: '2027-12-25', label: 'Natale' },
+      { date: '2027-12-26', label: 'Santo Stefano' }
+    ]
+  },
+  UK: {
+    2025: [
+      { date: '2025-01-01', label: 'New Year' },
+      { date: '2025-04-18', label: 'Good Friday' },
+      { date: '2025-04-21', label: 'Easter Monday' },
+      { date: '2025-05-05', label: 'Early May Bank' },
+      { date: '2025-05-26', label: 'Spring Bank' },
+      { date: '2025-08-25', label: 'Summer Bank' },
+      { date: '2025-12-25', label: 'Christmas' },
+      { date: '2025-12-26', label: 'Boxing Day' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'New Year' },
+      { date: '2026-04-03', label: 'Good Friday' },
+      { date: '2026-04-06', label: 'Easter Monday' },
+      { date: '2026-05-04', label: 'Early May Bank' },
+      { date: '2026-05-25', label: 'Spring Bank' },
+      { date: '2026-08-31', label: 'Summer Bank' },
+      { date: '2026-12-25', label: 'Christmas' },
+      { date: '2026-12-28', label: 'Boxing Day (substitute)' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'New Year' },
+      { date: '2027-03-26', label: 'Good Friday' },
+      { date: '2027-03-29', label: 'Easter Monday' },
+      { date: '2027-05-03', label: 'Early May Bank' },
+      { date: '2027-05-31', label: 'Spring Bank' },
+      { date: '2027-08-30', label: 'Summer Bank' },
+      { date: '2027-12-27', label: 'Christmas (substitute)' },
+      { date: '2027-12-28', label: 'Boxing Day (substitute)' }
+    ]
+  },
+  DE: {
+    2025: [
+      { date: '2025-01-01', label: 'Neujahr' },
+      { date: '2025-04-18', label: 'Karfreitag' },
+      { date: '2025-04-21', label: 'Ostermontag' },
+      { date: '2025-05-01', label: 'Tag der Arbeit' },
+      { date: '2025-05-29', label: 'Christi Himmelfahrt' },
+      { date: '2025-06-09', label: 'Pfingstmontag' },
+      { date: '2025-10-03', label: 'Tag der Deutschen Einheit' },
+      { date: '2025-12-25', label: 'Weihnachten' },
+      { date: '2025-12-26', label: 'Zweiter Weihnachtsfeiertag' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Neujahr' },
+      { date: '2026-04-03', label: 'Karfreitag' },
+      { date: '2026-04-06', label: 'Ostermontag' },
+      { date: '2026-05-01', label: 'Tag der Arbeit' },
+      { date: '2026-05-14', label: 'Christi Himmelfahrt' },
+      { date: '2026-05-25', label: 'Pfingstmontag' },
+      { date: '2026-10-03', label: 'Tag der Deutschen Einheit' },
+      { date: '2026-12-25', label: 'Weihnachten' },
+      { date: '2026-12-26', label: 'Zweiter Weihnachtsfeiertag' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Neujahr' },
+      { date: '2027-03-26', label: 'Karfreitag' },
+      { date: '2027-03-29', label: 'Ostermontag' },
+      { date: '2027-05-01', label: 'Tag der Arbeit' },
+      { date: '2027-05-06', label: 'Christi Himmelfahrt' },
+      { date: '2027-05-17', label: 'Pfingstmontag' },
+      { date: '2027-10-03', label: 'Tag der Deutschen Einheit' },
+      { date: '2027-12-25', label: 'Weihnachten' },
+      { date: '2027-12-26', label: 'Zweiter Weihnachtsfeiertag' }
+    ]
+  },
+  FR: {
+    2025: [
+      { date: '2025-01-01', label: 'Jour de l\'An' },
+      { date: '2025-04-21', label: 'Lundi de Paques' },
+      { date: '2025-05-01', label: 'Fete du Travail' },
+      { date: '2025-05-08', label: 'Victoire 1945' },
+      { date: '2025-05-29', label: 'Ascension' },
+      { date: '2025-06-09', label: 'Lundi de Pentecote' },
+      { date: '2025-07-14', label: 'Fete Nationale' },
+      { date: '2025-08-15', label: 'Assomption' },
+      { date: '2025-11-01', label: 'Toussaint' },
+      { date: '2025-11-11', label: 'Armistice' },
+      { date: '2025-12-25', label: 'Noel' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Jour de l\'An' },
+      { date: '2026-04-06', label: 'Lundi de Paques' },
+      { date: '2026-05-01', label: 'Fete du Travail' },
+      { date: '2026-05-08', label: 'Victoire 1945' },
+      { date: '2026-05-14', label: 'Ascension' },
+      { date: '2026-05-25', label: 'Lundi de Pentecote' },
+      { date: '2026-07-14', label: 'Fete Nationale' },
+      { date: '2026-08-15', label: 'Assomption' },
+      { date: '2026-11-01', label: 'Toussaint' },
+      { date: '2026-11-11', label: 'Armistice' },
+      { date: '2026-12-25', label: 'Noel' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Jour de l\'An' },
+      { date: '2027-03-29', label: 'Lundi de Paques' },
+      { date: '2027-05-01', label: 'Fete du Travail' },
+      { date: '2027-05-06', label: 'Ascension' },
+      { date: '2027-05-08', label: 'Victoire 1945' },
+      { date: '2027-05-17', label: 'Lundi de Pentecote' },
+      { date: '2027-07-14', label: 'Fete Nationale' },
+      { date: '2027-08-15', label: 'Assomption' },
+      { date: '2027-11-01', label: 'Toussaint' },
+      { date: '2027-11-11', label: 'Armistice' },
+      { date: '2027-12-25', label: 'Noel' }
+    ]
+  },
+  ES: {
+    2025: [
+      { date: '2025-01-01', label: 'Ano Nuevo' },
+      { date: '2025-01-06', label: 'Epifania' },
+      { date: '2025-04-18', label: 'Viernes Santo' },
+      { date: '2025-05-01', label: 'Dia del Trabajo' },
+      { date: '2025-08-15', label: 'Asuncion' },
+      { date: '2025-10-12', label: 'Fiesta Nacional' },
+      { date: '2025-11-01', label: 'Todos los Santos' },
+      { date: '2025-12-06', label: 'Dia de la Constitucion' },
+      { date: '2025-12-08', label: 'Inmaculada Concepcion' },
+      { date: '2025-12-25', label: 'Navidad' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Ano Nuevo' },
+      { date: '2026-01-06', label: 'Epifania' },
+      { date: '2026-04-03', label: 'Viernes Santo' },
+      { date: '2026-05-01', label: 'Dia del Trabajo' },
+      { date: '2026-08-15', label: 'Asuncion' },
+      { date: '2026-10-12', label: 'Fiesta Nacional' },
+      { date: '2026-11-01', label: 'Todos los Santos' },
+      { date: '2026-12-06', label: 'Dia de la Constitucion' },
+      { date: '2026-12-07', label: 'Inmaculada Concepcion (substitute)' },
+      { date: '2026-12-25', label: 'Navidad' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Ano Nuevo' },
+      { date: '2027-01-06', label: 'Epifania' },
+      { date: '2027-03-26', label: 'Viernes Santo' },
+      { date: '2027-05-01', label: 'Dia del Trabajo' },
+      { date: '2027-08-15', label: 'Asuncion' },
+      { date: '2027-10-12', label: 'Fiesta Nacional' },
+      { date: '2027-11-01', label: 'Todos los Santos' },
+      { date: '2027-12-06', label: 'Dia de la Constitucion' },
+      { date: '2027-12-08', label: 'Inmaculada Concepcion' },
+      { date: '2027-12-25', label: 'Navidad' }
+    ]
+  },
+  US: {
+    2025: [
+      { date: '2025-01-01', label: 'New Year\'s Day' },
+      { date: '2025-01-20', label: 'MLK Day' },
+      { date: '2025-02-17', label: 'Presidents\' Day' },
+      { date: '2025-05-26', label: 'Memorial Day' },
+      { date: '2025-06-19', label: 'Juneteenth' },
+      { date: '2025-07-04', label: 'Independence Day' },
+      { date: '2025-09-01', label: 'Labor Day' },
+      { date: '2025-11-27', label: 'Thanksgiving' },
+      { date: '2025-12-25', label: 'Christmas' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'New Year\'s Day' },
+      { date: '2026-01-19', label: 'MLK Day' },
+      { date: '2026-02-16', label: 'Presidents\' Day' },
+      { date: '2026-05-25', label: 'Memorial Day' },
+      { date: '2026-06-19', label: 'Juneteenth' },
+      { date: '2026-07-03', label: 'Independence Day (observed)' },
+      { date: '2026-09-07', label: 'Labor Day' },
+      { date: '2026-11-26', label: 'Thanksgiving' },
+      { date: '2026-12-25', label: 'Christmas' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'New Year\'s Day' },
+      { date: '2027-01-18', label: 'MLK Day' },
+      { date: '2027-02-15', label: 'Presidents\' Day' },
+      { date: '2027-05-31', label: 'Memorial Day' },
+      { date: '2027-06-18', label: 'Juneteenth (observed)' },
+      { date: '2027-07-05', label: 'Independence Day (observed)' },
+      { date: '2027-09-06', label: 'Labor Day' },
+      { date: '2027-11-25', label: 'Thanksgiving' },
+      { date: '2027-12-24', label: 'Christmas (observed)' }
+    ]
+  },
+  NL: {
+    2025: [
+      { date: '2025-01-01', label: 'Nieuwjaarsdag' },
+      { date: '2025-04-18', label: 'Goede Vrijdag' },
+      { date: '2025-04-20', label: 'Pasen' },
+      { date: '2025-04-21', label: 'Tweede Paasdag' },
+      { date: '2025-04-26', label: 'Koningsdag' },
+      { date: '2025-05-05', label: 'Bevrijdingsdag' },
+      { date: '2025-05-29', label: 'Hemelvaartsdag' },
+      { date: '2025-06-08', label: 'Pinksteren' },
+      { date: '2025-06-09', label: 'Tweede Pinksterdag' },
+      { date: '2025-12-25', label: 'Kerstmis' },
+      { date: '2025-12-26', label: 'Tweede Kerstdag' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Nieuwjaarsdag' },
+      { date: '2026-04-03', label: 'Goede Vrijdag' },
+      { date: '2026-04-05', label: 'Pasen' },
+      { date: '2026-04-06', label: 'Tweede Paasdag' },
+      { date: '2026-04-27', label: 'Koningsdag' },
+      { date: '2026-05-05', label: 'Bevrijdingsdag' },
+      { date: '2026-05-14', label: 'Hemelvaartsdag' },
+      { date: '2026-05-24', label: 'Pinksteren' },
+      { date: '2026-05-25', label: 'Tweede Pinksterdag' },
+      { date: '2026-12-25', label: 'Kerstmis' },
+      { date: '2026-12-26', label: 'Tweede Kerstdag' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Nieuwjaarsdag' },
+      { date: '2027-03-26', label: 'Goede Vrijdag' },
+      { date: '2027-03-28', label: 'Pasen' },
+      { date: '2027-03-29', label: 'Tweede Paasdag' },
+      { date: '2027-04-27', label: 'Koningsdag' },
+      { date: '2027-05-05', label: 'Bevrijdingsdag' },
+      { date: '2027-05-06', label: 'Hemelvaartsdag' },
+      { date: '2027-05-16', label: 'Pinksteren' },
+      { date: '2027-05-17', label: 'Tweede Pinksterdag' },
+      { date: '2027-12-25', label: 'Kerstmis' },
+      { date: '2027-12-26', label: 'Tweede Kerstdag' }
+    ]
+  },
+  PT: {
+    2025: [
+      { date: '2025-01-01', label: 'Ano Novo' },
+      { date: '2025-04-18', label: 'Sexta-feira Santa' },
+      { date: '2025-04-20', label: 'Pascoa' },
+      { date: '2025-04-25', label: 'Dia da Liberdade' },
+      { date: '2025-05-01', label: 'Dia do Trabalhador' },
+      { date: '2025-06-10', label: 'Dia de Portugal' },
+      { date: '2025-06-19', label: 'Corpo de Deus' },
+      { date: '2025-08-15', label: 'Assuncao' },
+      { date: '2025-10-05', label: 'Implantacao da Republica' },
+      { date: '2025-11-01', label: 'Todos os Santos' },
+      { date: '2025-12-01', label: 'Restauracao da Independencia' },
+      { date: '2025-12-08', label: 'Imaculada Conceicao' },
+      { date: '2025-12-25', label: 'Natal' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Ano Novo' },
+      { date: '2026-04-03', label: 'Sexta-feira Santa' },
+      { date: '2026-04-05', label: 'Pascoa' },
+      { date: '2026-04-25', label: 'Dia da Liberdade' },
+      { date: '2026-05-01', label: 'Dia do Trabalhador' },
+      { date: '2026-06-04', label: 'Corpo de Deus' },
+      { date: '2026-06-10', label: 'Dia de Portugal' },
+      { date: '2026-08-15', label: 'Assuncao' },
+      { date: '2026-10-05', label: 'Implantacao da Republica' },
+      { date: '2026-11-01', label: 'Todos os Santos' },
+      { date: '2026-12-01', label: 'Restauracao da Independencia' },
+      { date: '2026-12-08', label: 'Imaculada Conceicao' },
+      { date: '2026-12-25', label: 'Natal' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Ano Novo' },
+      { date: '2027-03-26', label: 'Sexta-feira Santa' },
+      { date: '2027-03-28', label: 'Pascoa' },
+      { date: '2027-04-25', label: 'Dia da Liberdade' },
+      { date: '2027-05-01', label: 'Dia do Trabalhador' },
+      { date: '2027-05-27', label: 'Corpo de Deus' },
+      { date: '2027-06-10', label: 'Dia de Portugal' },
+      { date: '2027-08-15', label: 'Assuncao' },
+      { date: '2027-10-05', label: 'Implantacao da Republica' },
+      { date: '2027-11-01', label: 'Todos os Santos' },
+      { date: '2027-12-01', label: 'Restauracao da Independencia' },
+      { date: '2027-12-08', label: 'Imaculada Conceicao' },
+      { date: '2027-12-25', label: 'Natal' }
+    ]
+  },
+  AT: {
+    2025: [
+      { date: '2025-01-01', label: 'Neujahr' },
+      { date: '2025-01-06', label: 'Heilige Drei Konige' },
+      { date: '2025-04-21', label: 'Ostermontag' },
+      { date: '2025-05-01', label: 'Staatsfeiertag' },
+      { date: '2025-05-29', label: 'Christi Himmelfahrt' },
+      { date: '2025-06-09', label: 'Pfingstmontag' },
+      { date: '2025-06-19', label: 'Fronleichnam' },
+      { date: '2025-08-15', label: 'Maria Himmelfahrt' },
+      { date: '2025-10-26', label: 'Nationalfeiertag' },
+      { date: '2025-11-01', label: 'Allerheiligen' },
+      { date: '2025-12-08', label: 'Maria Empfangnis' },
+      { date: '2025-12-25', label: 'Weihnachten' },
+      { date: '2025-12-26', label: 'Stefanitag' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Neujahr' },
+      { date: '2026-01-06', label: 'Heilige Drei Konige' },
+      { date: '2026-04-06', label: 'Ostermontag' },
+      { date: '2026-05-01', label: 'Staatsfeiertag' },
+      { date: '2026-05-14', label: 'Christi Himmelfahrt' },
+      { date: '2026-05-25', label: 'Pfingstmontag' },
+      { date: '2026-06-04', label: 'Fronleichnam' },
+      { date: '2026-08-15', label: 'Maria Himmelfahrt' },
+      { date: '2026-10-26', label: 'Nationalfeiertag' },
+      { date: '2026-11-01', label: 'Allerheiligen' },
+      { date: '2026-12-08', label: 'Maria Empfangnis' },
+      { date: '2026-12-25', label: 'Weihnachten' },
+      { date: '2026-12-26', label: 'Stefanitag' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Neujahr' },
+      { date: '2027-01-06', label: 'Heilige Drei Konige' },
+      { date: '2027-03-29', label: 'Ostermontag' },
+      { date: '2027-05-01', label: 'Staatsfeiertag' },
+      { date: '2027-05-06', label: 'Christi Himmelfahrt' },
+      { date: '2027-05-17', label: 'Pfingstmontag' },
+      { date: '2027-05-27', label: 'Fronleichnam' },
+      { date: '2027-08-15', label: 'Maria Himmelfahrt' },
+      { date: '2027-10-26', label: 'Nationalfeiertag' },
+      { date: '2027-11-01', label: 'Allerheiligen' },
+      { date: '2027-12-08', label: 'Maria Empfangnis' },
+      { date: '2027-12-25', label: 'Weihnachten' },
+      { date: '2027-12-26', label: 'Stefanitag' }
+    ]
+  },
+  BE: {
+    2025: [
+      { date: '2025-01-01', label: 'Nieuwjaar' },
+      { date: '2025-04-21', label: 'Paasmaandag' },
+      { date: '2025-05-01', label: 'Dag van de Arbeid' },
+      { date: '2025-05-29', label: 'Hemelvaart' },
+      { date: '2025-06-09', label: 'Pinkstermaandag' },
+      { date: '2025-07-21', label: 'Nationale Feestdag' },
+      { date: '2025-08-15', label: 'O.L.V. Hemelvaart' },
+      { date: '2025-11-01', label: 'Allerheiligen' },
+      { date: '2025-11-11', label: 'Wapenstilstand' },
+      { date: '2025-12-25', label: 'Kerstmis' }
+    ],
+    2026: [
+      { date: '2026-01-01', label: 'Nieuwjaar' },
+      { date: '2026-04-06', label: 'Paasmaandag' },
+      { date: '2026-05-01', label: 'Dag van de Arbeid' },
+      { date: '2026-05-14', label: 'Hemelvaart' },
+      { date: '2026-05-25', label: 'Pinkstermaandag' },
+      { date: '2026-07-21', label: 'Nationale Feestdag' },
+      { date: '2026-08-15', label: 'O.L.V. Hemelvaart' },
+      { date: '2026-11-01', label: 'Allerheiligen' },
+      { date: '2026-11-11', label: 'Wapenstilstand' },
+      { date: '2026-12-25', label: 'Kerstmis' }
+    ],
+    2027: [
+      { date: '2027-01-01', label: 'Nieuwjaar' },
+      { date: '2027-03-29', label: 'Paasmaandag' },
+      { date: '2027-05-01', label: 'Dag van de Arbeid' },
+      { date: '2027-05-06', label: 'Hemelvaart' },
+      { date: '2027-05-17', label: 'Pinkstermaandag' },
+      { date: '2027-07-21', label: 'Nationale Feestdag' },
+      { date: '2027-08-15', label: 'O.L.V. Hemelvaart' },
+      { date: '2027-11-01', label: 'Allerheiligen' },
+      { date: '2027-11-11', label: 'Wapenstilstand' },
+      { date: '2027-12-25', label: 'Kerstmis' }
+    ]
+  }
+};
+
+function importNationalHolidays(calId) {
+  const countryEl = document.getElementById('cal-preset-country');
+  const yearEl = document.getElementById('cal-preset-year');
+  if (!countryEl || !countryEl.value) { showToast('Select a country', 'error'); return; }
+  const country = countryEl.value;
+  const year = yearEl ? yearEl.value : '2026';
+  const presets = NATIONAL_HOLIDAYS[country]?.[year];
+  if (!presets || presets.length === 0) { showToast('No holidays available for this selection', 'error'); return; }
+
+  const cal = calendars[calId];
+  if (!cal) return;
+
+  // Check for duplicates
+  const existingDates = new Set(cal.entries.filter(e => e.type === 'holiday').map(e => e.date));
+  let added = 0;
+  let skipped = 0;
+  for (const h of presets) {
+    if (existingDates.has(h.date)) {
+      skipped++;
+      continue;
+    }
+    cal.entries.push({ type: 'holiday', date: h.date, label: h.label });
+    added++;
+  }
+
+  // Sort entries by date
+  cal.entries.sort((a, b) => {
+    const dA = a.date || a.startDate || '';
+    const dB = b.date || b.startDate || '';
+    return dA.localeCompare(dB);
+  });
+
+  invalidateHolidayCache();
+  recalcFinishDates();
+  renderSettingsBody();
+  renderAll();
+  scheduleSave();
+
+  const msg = added + ' holidays imported' + (skipped > 0 ? ', ' + skipped + ' duplicates skipped' : '');
+  showToast(msg, 'success');
 }

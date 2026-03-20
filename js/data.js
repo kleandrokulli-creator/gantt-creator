@@ -51,6 +51,7 @@ function undoEdit() {
     finish: s.finish ? new Date(s.finish) : null,
     children: [], parent: null
   }));
+  invalidateHolidayCache();
   buildTree();
   reassignColors();
   const msBtn = document.getElementById('ms-inline-btn');
@@ -960,22 +961,71 @@ function applyOwnDependencies(task) {
   propagateDependencies(task);
 }
 
+/**
+ * Compute the required date by applying lag to a base date.
+ * In workingDaysMode: lag is in working days (uses successor's calendar).
+ * Otherwise: lag is in calendar days.
+ * direction: 'forward' (add lag) or 'backward' (subtract lag)
+ */
+function _applyLag(baseDate, lag, calendarId, direction) {
+  if (!baseDate) return null;
+  if (lag === 0) return new Date(baseDate);
+  if (workingDaysMode) {
+    if (lag > 0) {
+      return direction === 'forward'
+        ? addWorkingDays(baseDate, lag, calendarId)
+        : subtractWorkingDays(baseDate, lag, calendarId);
+    } else {
+      const absLag = Math.abs(lag);
+      return direction === 'forward'
+        ? subtractWorkingDays(baseDate, absLag, calendarId)
+        : addWorkingDays(baseDate, absLag, calendarId);
+    }
+  }
+  // Calendar days
+  const ms = lag * MS_PER_DAY;
+  return direction === 'forward'
+    ? new Date(baseDate.getTime() + ms)
+    : new Date(baseDate.getTime() - ms);
+}
+
+/**
+ * Snap start/finish dates to working days using the task's own calendar.
+ * Start snaps forward, finish snaps backward (to avoid shortening the task).
+ */
+function _snapToWorkingDays(task) {
+  if (!workingDaysMode) return;
+  const calId = task.calendarId || getDefaultCalendarId();
+  if (task.start) task.start = nextWorkingDay(task.start, calId);
+  if (task.finish) task.finish = prevWorkingDay(task.finish, calId);
+  // Ensure finish is not before start after snapping
+  if (task.start && task.finish && task.finish < task.start) {
+    task.finish = new Date(task.start);
+  }
+}
+
 /** Apply a single dependency constraint. Returns true if dates changed. */
 function applyDependencyConstraint(task, dep, predecessor) {
   if (!predecessor.start && !predecessor.finish) return false;
-  const lagMs = dep.lag * MS_PER_DAY;
+  // Use successor's calendar for lag calculation (industry standard)
+  const calId = task.calendarId || getDefaultCalendarId();
   let changed = false;
 
   if (dep.type === 'FS') {
-    const requiredStart = predecessor.finish
-      ? new Date(predecessor.finish.getTime() + lagMs)
-      : predecessor.start ? new Date(predecessor.start.getTime() + lagMs) : null;
+    let requiredStart = predecessor.finish
+      ? _applyLag(predecessor.finish, dep.lag, calId, 'forward')
+      : predecessor.start ? _applyLag(predecessor.start, dep.lag, calId, 'forward') : null;
+    if (workingDaysMode && requiredStart) requiredStart = nextWorkingDay(requiredStart, calId);
     if (requiredStart && task.start) {
       if (task.start.getTime() < requiredStart.getTime()) {
-        const duration = task.finish && task.start ? task.finish.getTime() - task.start.getTime() : 0;
+        const durationDays = (workingDaysMode && task.finish && task.start)
+          ? countWorkingDays(task.start, task.finish, calId)
+          : (task.finish && task.start ? Math.round((task.finish - task.start) / MS_PER_DAY) : 0);
         task.start = requiredStart;
-        if (duration > 0) {
-          task.finish = new Date(requiredStart.getTime() + duration);
+        if (durationDays > 0) {
+          task.finish = workingDaysMode
+            ? addWorkingDays(requiredStart, durationDays, calId)
+            : new Date(requiredStart.getTime() + durationDays * MS_PER_DAY);
         } else if (task.finish && task.finish.getTime() < requiredStart.getTime()) {
           task.finish = new Date(requiredStart.getTime());
         }
@@ -986,35 +1036,56 @@ function applyDependencyConstraint(task, dep, predecessor) {
       changed = true;
     }
   } else if (dep.type === 'SS') {
-    const requiredStart = predecessor.start
-      ? new Date(predecessor.start.getTime() + lagMs) : null;
+    let requiredStart = predecessor.start
+      ? _applyLag(predecessor.start, dep.lag, calId, 'forward') : null;
+    if (workingDaysMode && requiredStart) requiredStart = nextWorkingDay(requiredStart, calId);
     if (requiredStart && task.start) {
       if (task.start.getTime() < requiredStart.getTime()) {
-        const duration = task.finish && task.start ? task.finish.getTime() - task.start.getTime() : 0;
+        const durationDays = (workingDaysMode && task.finish && task.start)
+          ? countWorkingDays(task.start, task.finish, calId)
+          : (task.finish && task.start ? Math.round((task.finish - task.start) / MS_PER_DAY) : 0);
         task.start = requiredStart;
-        if (duration > 0) task.finish = new Date(requiredStart.getTime() + duration);
+        if (durationDays > 0) {
+          task.finish = workingDaysMode
+            ? addWorkingDays(requiredStart, durationDays, calId)
+            : new Date(requiredStart.getTime() + durationDays * MS_PER_DAY);
+        }
         changed = true;
       }
     }
   } else if (dep.type === 'FF') {
-    const requiredFinish = predecessor.finish
-      ? new Date(predecessor.finish.getTime() + lagMs) : null;
+    let requiredFinish = predecessor.finish
+      ? _applyLag(predecessor.finish, dep.lag, calId, 'forward') : null;
+    if (workingDaysMode && requiredFinish) requiredFinish = prevWorkingDay(requiredFinish, calId);
     if (requiredFinish && task.finish) {
       if (task.finish.getTime() < requiredFinish.getTime()) {
-        const duration = task.finish && task.start ? task.finish.getTime() - task.start.getTime() : 0;
+        const durationDays = (workingDaysMode && task.finish && task.start)
+          ? countWorkingDays(task.start, task.finish, calId)
+          : (task.finish && task.start ? Math.round((task.finish - task.start) / MS_PER_DAY) : 0);
         task.finish = requiredFinish;
-        if (duration > 0) task.start = new Date(requiredFinish.getTime() - duration);
+        if (durationDays > 0) {
+          task.start = workingDaysMode
+            ? subtractWorkingDays(requiredFinish, durationDays, calId)
+            : new Date(requiredFinish.getTime() - durationDays * MS_PER_DAY);
+        }
         changed = true;
       }
     }
   } else if (dep.type === 'SF') {
-    const requiredFinish = predecessor.start
-      ? new Date(predecessor.start.getTime() + lagMs) : null;
+    let requiredFinish = predecessor.start
+      ? _applyLag(predecessor.start, dep.lag, calId, 'forward') : null;
+    if (workingDaysMode && requiredFinish) requiredFinish = prevWorkingDay(requiredFinish, calId);
     if (requiredFinish && task.finish) {
       if (task.finish.getTime() < requiredFinish.getTime()) {
-        const duration = task.finish && task.start ? task.finish.getTime() - task.start.getTime() : 0;
+        const durationDays = (workingDaysMode && task.finish && task.start)
+          ? countWorkingDays(task.start, task.finish, calId)
+          : (task.finish && task.start ? Math.round((task.finish - task.start) / MS_PER_DAY) : 0);
         task.finish = requiredFinish;
-        if (duration > 0) task.start = new Date(requiredFinish.getTime() - duration);
+        if (durationDays > 0) {
+          task.start = workingDaysMode
+            ? subtractWorkingDays(requiredFinish, durationDays, calId)
+            : new Date(requiredFinish.getTime() - durationDays * MS_PER_DAY);
+        }
         changed = true;
       }
     }

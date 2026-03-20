@@ -302,6 +302,65 @@ function addWorkingDays(startDate, numDays, calendarId) {
   return d;
 }
 
+/** Subtract N working days backward from startDate */
+function subtractWorkingDays(startDate, numDays, calendarId) {
+  const calId = calendarId || getDefaultCalendarId();
+  const holidays = calId ? buildHolidayLookup(calId) : new Set();
+  const d = new Date(startDate);
+  d.setHours(0, 0, 0, 0);
+  let remaining = numDays;
+  while (remaining > 0) {
+    d.setDate(d.getDate() - 1);
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) {
+      const ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (!holidays.has(ds)) remaining--;
+    }
+  }
+  return d;
+}
+
+/**
+ * Snap a date to the next working day if it falls on a weekend or holiday.
+ * Returns the same date if already a working day.
+ */
+function nextWorkingDay(date, calendarId) {
+  const calId = calendarId || getDefaultCalendarId();
+  const holidays = calId ? buildHolidayLookup(calId) : new Set();
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  // Safety limit to avoid infinite loop
+  for (let i = 0; i < 365; i++) {
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) {
+      const ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (!holidays.has(ds)) return d;
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return d; // fallback
+}
+
+/**
+ * Snap a date to the previous working day if it falls on a weekend or holiday.
+ * Returns the same date if already a working day.
+ */
+function prevWorkingDay(date, calendarId) {
+  const calId = calendarId || getDefaultCalendarId();
+  const holidays = calId ? buildHolidayLookup(calId) : new Set();
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  for (let i = 0; i < 365; i++) {
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) {
+      const ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (!holidays.has(ds)) return d;
+    }
+    d.setDate(d.getDate() - 1);
+  }
+  return d; // fallback
+}
+
 function assignCalendarWithChildren(task, calId) {
   task.calendarId = calId;
   const prefix = task.outline + '.';

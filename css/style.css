@@ -1028,6 +1028,18 @@ input:focus-visible, textarea:focus-visible {
   background: rgba(59,130,246,.06) !important;
 }
 
+/* Dependency legend icon & popup */
+.dep-legend-icon { display:inline-flex; align-items:center; margin-left:4px; cursor:pointer; opacity:.5; vertical-align:middle; flex-shrink:0 }
+.dep-legend-icon:hover { opacity:1 }
+.dep-legend-popup { background:var(--card-bg,#1e293b); color:var(--body-fg,#e2e8f0); border:1px solid var(--border,#334155); border-radius:10px; padding:12px 14px; font-size:.78rem; box-shadow:0 8px 24px rgba(0,0,0,.3); max-width:380px; line-height:1.5 }
+.dep-legend-title { font-weight:700; font-size:.82rem; margin-bottom:4px; color:var(--blue,#3b82f6) }
+.dep-legend-table { width:100%; border-collapse:collapse }
+.dep-legend-table td { padding:2px 6px; border-bottom:1px solid var(--border,#334155) }
+.dep-legend-table tr:last-child td { border-bottom:none }
+.dep-legend-code { font-family:monospace; font-weight:700; color:var(--blue,#3b82f6); white-space:nowrap }
+.dep-legend-desc { color:var(--grey-txt,#94a3b8); font-size:.72rem }
+.dep-legend-format { font-family:monospace; padding:4px 8px; background:rgba(59,130,246,.1); border-radius:4px; display:inline-block }
+
 /* Site footer */
 .site-footer{position:fixed;bottom:0;left:0;right:0;height:28px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:.72rem;color:#9ca3af;background:var(--navy);border-top:1px solid rgba(255,255,255,.08);z-index:5}
 .site-footer a{color:#9ca3af;display:inline-flex;align-items:center;transition:color .15s}

@@ -490,8 +490,7 @@ function renderTimelineBars(dpx) {
     }
   }
 
-  // Task bars — use scoped holiday set for splitting (matches shading)
-  const scopedHolidaySet = workingDaysMode ? buildScopedHolidayLookup() : new Set();
+  // Task bars — each bar splits using its OWN calendar's holidays (not global scoped set)
   const todayTime = new Date().setHours(0, 0, 0, 0);
   visibleRows.forEach((r, idx) => {
     const task = r.task;
@@ -529,8 +528,10 @@ function renderTimelineBars(dpx) {
       const barH = 18;
       const barY = y + (rowH - barH) / 2;
       const cls = r.hasChildren ? 'summary' : '';
-      const shouldSplit = workingDaysMode && task.finish && scopedHolidaySet.size > 0;
-      const holidayGaps = shouldSplit ? findHolidayGaps(task.start, task.finish, scopedHolidaySet) : [];
+      // Use the task's own calendar for bar splitting (not the global scoped set)
+      const taskCalId = task.calendarId || getDefaultCalendarId();
+      const shouldSplit = workingDaysMode && task.finish && taskCalId;
+      const holidayGaps = shouldSplit ? findHolidayGaps(task.start, task.finish, taskCalId) : [];
 
       if (holidayGaps.length > 0) {
         // Split bar into segments around closure gaps
@@ -787,6 +788,10 @@ function renderDataTable() {
       } else {
         hhtml += `<th data-col-id="select" ${wStyle}>${resizeHandle}</th>`;
       }
+    } else if (col.id === 'deps') {
+      // Dependencies column: add legend info icon
+      const legendTip = 'FS = Finish-to-Start (default)\\nSS = Start-to-Start\\nFF = Finish-to-Finish\\nSF = Start-to-Finish\\n\\nFormat: [task#][type][lag]\\nExamples: 3FS, 5SS+2d, 1FS-1d\\n\\nLag: +Nd = delay, -Nd = overlap';
+      hhtml += `<th data-col-id="${col.id}" ${wStyle} ${sortable} ${dragAttr}>${col.label}<span class="dep-legend-icon" onclick="event.stopPropagation();toggleDepLegend(event)" title="${legendTip}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>${arrow}${filterIcon}${resizeHandle}</th>`;
     } else {
       const sortTitle = si ? ' title="Tasto destro per ordinare"' : '';
       hhtml += `<th data-col-id="${col.id}" ${wStyle} ${sortable} ${dragAttr}${sortTitle}><span class="th-content"><span class="th-label">${col.label}</span>${arrow}${filterIcon}</span>${resizeHandle}</th>`;
@@ -1008,6 +1013,49 @@ function buildDepTooltip(depStr) {
     const lag = d.lag ? (d.lag > 0 ? ' +' : ' ') + d.lag + 'd' : '';
     return `#${d.taskNum} ${name}\n${typeLabels[d.type] || d.type}${lag}`;
   }).join('\n---\n');
+}
+
+/** Toggle a dependency legend popup near the Dependencies column header */
+function toggleDepLegend(event) {
+  event.stopPropagation();
+  let popup = document.getElementById('dep-legend-popup');
+  if (popup) { popup.remove(); return; }
+  popup = document.createElement('div');
+  popup.id = 'dep-legend-popup';
+  popup.className = 'dep-legend-popup';
+  popup.innerHTML = `
+    <div class="dep-legend-title">Dependency Types</div>
+    <table class="dep-legend-table">
+      <tr><td class="dep-legend-code">FS</td><td>Finish-to-Start</td><td class="dep-legend-desc">B starts after A finishes</td></tr>
+      <tr><td class="dep-legend-code">SS</td><td>Start-to-Start</td><td class="dep-legend-desc">B starts when A starts</td></tr>
+      <tr><td class="dep-legend-code">FF</td><td>Finish-to-Finish</td><td class="dep-legend-desc">B finishes when A finishes</td></tr>
+      <tr><td class="dep-legend-code">SF</td><td>Start-to-Finish</td><td class="dep-legend-desc">B finishes when A starts</td></tr>
+    </table>
+    <div class="dep-legend-title" style="margin-top:8px">Format</div>
+    <div class="dep-legend-format"><code>[task#][type][lag]</code></div>
+    <div class="dep-legend-title" style="margin-top:6px">Examples</div>
+    <table class="dep-legend-table">
+      <tr><td class="dep-legend-code">3FS</td><td colspan="2">Start after task #3 finishes</td></tr>
+      <tr><td class="dep-legend-code">5SS+2d</td><td colspan="2">Start 2 days after task #5 starts</td></tr>
+      <tr><td class="dep-legend-code">1FS-1d</td><td colspan="2">Start 1 day before task #1 finishes (overlap)</td></tr>
+      <tr><td class="dep-legend-code">2,4FS</td><td colspan="2">Multiple deps (comma-separated)</td></tr>
+    </table>
+  `;
+  // Position near the click
+  popup.style.position = 'fixed';
+  popup.style.left = event.clientX + 'px';
+  popup.style.top = (event.clientY + 10) + 'px';
+  popup.style.zIndex = '9999';
+  document.body.appendChild(popup);
+  // Adjust if overflows
+  const rect = popup.getBoundingClientRect();
+  if (rect.right > window.innerWidth - 10) popup.style.left = (window.innerWidth - rect.width - 10) + 'px';
+  if (rect.bottom > window.innerHeight - 10) popup.style.top = (event.clientY - rect.height - 10) + 'px';
+  // Close on click outside
+  setTimeout(() => {
+    const closer = (e) => { if (!popup.contains(e.target)) { popup.remove(); document.removeEventListener('click', closer); } };
+    document.addEventListener('click', closer);
+  }, 50);
 }
 
 /** Render a colored status badge */

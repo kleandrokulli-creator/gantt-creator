@@ -122,7 +122,7 @@ function openEditPanel(taskId) {
     </div>
     <div class="ep-field">
       <label>Calendar</label>
-      <select id="ep-calendar">${Object.keys(calendars).map(id => `<option value="${id}" ${id === (task.calendarId || getDefaultCalendarId()) ? 'selected' : ''}>${esc(calendars[id].name)}${calendars[id].isDefault ? ' (default)' : ''}</option>`).join('')}</select>
+      <select id="ep-calendar">${Object.keys(calendars).filter(id => !calendars[id].isDefault || calendars[id].entries.length > 0).map(id => `<option value="${id}" ${id === (task.calendarId || getDefaultCalendarId()) ? 'selected' : ''}>${esc(calendars[id].name)}</option>`).join('')}${Object.keys(calendars).filter(id => !calendars[id].isDefault || calendars[id].entries.length > 0).length === 0 ? '<option value="" disabled>No calendars configured</option>' : ''}</select>
     </div>
     <div class="ep-field">
       <label>Bar color <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">${task.colorOverride ? '(overridden)' : '(automatic)'}</span></label>
@@ -689,7 +689,11 @@ let _selectedCalId = null;
 function renderCalendarSettingsHTML() {
   ensureDefaultCalendar();
   const calIds = Object.keys(calendars);
-  if (!_selectedCalId || !calendars[_selectedCalId]) _selectedCalId = calIds[0];
+  // Hide the system default calendar from the UI — it's a silent fallback
+  const visibleCalIds = calIds.filter(id => !calendars[id].isDefault || calendars[id].entries.length > 0 || calIds.length === 1 && false);
+  if (!_selectedCalId || !calendars[_selectedCalId] || (calendars[_selectedCalId].isDefault && !visibleCalIds.includes(_selectedCalId))) {
+    _selectedCalId = visibleCalIds[0] || null;
+  }
 
   let html = '';
 
@@ -702,19 +706,23 @@ function renderCalendarSettingsHTML() {
     </label>
   </div>`;
 
-  // Calendar selector chips
+  // Calendar selector chips (hide empty default)
   html += `<div class="cal-chips-row">`;
-  calIds.forEach(id => {
+  visibleCalIds.forEach(id => {
     const cal = calendars[id];
     const active = id === _selectedCalId ? 'active' : '';
-    const defBadge = cal.isDefault ? ' (default)' : '';
-    html += `<span class="cal-chip ${active}" style="border-color:${cal.color}" onclick="selectCalendarChip('${id}')">${esc(cal.name)}${defBadge}</span>`;
+    html += `<span class="cal-chip ${active}" style="border-color:${cal.color}" onclick="selectCalendarChip('${id}')">${esc(cal.name)}</span>`;
   });
-  html += `<span class="cal-chip cal-chip-add" onclick="addCalendar()">+ Add</span>`;
+  html += `<span class="cal-chip cal-chip-add" onclick="addCalendar()">+ Add Calendar</span>`;
   html += `</div>`;
 
+  if (visibleCalIds.length === 0) {
+    html += `<p class="settings-hint" style="margin:12px 0;text-align:center">No holiday calendars configured.<br>Click "+ Add Calendar" to create one (e.g. Italy, UK).</p>`;
+    return html;
+  }
+
   // Selected calendar details
-  const cal = calendars[_selectedCalId];
+  const cal = _selectedCalId ? calendars[_selectedCalId] : null;
   if (cal) {
     html += `<div class="cal-detail">`;
     html += `<div class="setting-row" style="gap:8px;margin-bottom:8px">
@@ -900,13 +908,15 @@ function openCalendarAssignModal() {
   const body = document.getElementById('cal-assign-body');
   const calIds = Object.keys(calendars);
   const defaultCalId = getDefaultCalendarId();
+  // Only show calendars that have entries (hide empty default)
+  const assignableCalIds = calIds.filter(id => !calendars[id].isDefault || calendars[id].entries.length > 0);
 
   // Get Level 1 and Level 2 tasks
   const phases = allTasks.filter(t => t.depth <= 2);
 
   let html = '';
-  if (calIds.length === 0) {
-    html = '<p>No calendars defined. Create one in Settings > Calendar first.</p>';
+  if (assignableCalIds.length === 0) {
+    html = '<p>No holiday calendars configured. Create one in Settings > Calendar first.</p>';
   } else if (phases.length === 0) {
     html = '<p>No tasks to assign calendars to.</p>';
   } else {
@@ -914,7 +924,7 @@ function openCalendarAssignModal() {
     html += `<div style="margin-bottom:12px">
       <label style="font-weight:600;font-size:.85rem">Select calendar to assign:</label>
       <select id="cal-assign-select" onchange="calAssignRefreshList()" style="margin-left:8px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:.85rem">
-        ${calIds.map(id => `<option value="${id}">${esc(calendars[id].name)}${calendars[id].isDefault ? ' (default)' : ''}</option>`).join('')}
+        ${assignableCalIds.map(id => `<option value="${id}">${esc(calendars[id].name)}</option>`).join('')}
       </select>
     </div>`;
 
@@ -927,7 +937,7 @@ function openCalendarAssignModal() {
       </div>
     </div>`;
     html += `<div class="cal-assign-list" id="cal-assign-list-container" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px">`;
-    html += _buildCalAssignListHTML(calIds[0], defaultCalId, phases);
+    html += _buildCalAssignListHTML(assignableCalIds[0], defaultCalId, phases);
     html += `</div>`;
 
     // Apply button

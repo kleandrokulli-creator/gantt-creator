@@ -270,10 +270,17 @@ async function createNewProject(name) {
   Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
   Object.assign(PRIORITY_COLORS, defaults.priorityColors);
 
+  // Reset calendars for the new project
+  calendars = {};
+  ensureDefaultCalendar();
+  invalidateHolidayCache();
+
   projects[id] = {
     name: trimmed, meta: {}, tasks: [],
     labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
-    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS }
+    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS },
+    calendars: JSON.parse(JSON.stringify(calendars)),
+    workingDaysMode: workingDaysMode
   };
   currentProjectId = id;
   projectMeta = {};
@@ -557,16 +564,21 @@ function recalcDuration(task) {
  * Recalculate finish dates after holidays change.
  * Preserves each leaf task's working-day duration and extends/shrinks
  * the finish date to skip newly added holidays. Then propagates dependencies.
+ * @param {string} [forCalendarId] - If provided, only recalc tasks using this specific calendar.
+ *                                    If omitted, recalcs all tasks (used for global changes like toggling working days mode).
  */
-function recalcFinishDates() {
+function recalcFinishDates(forCalendarId) {
   if (!workingDaysMode) return;
+  const defaultCalId = getDefaultCalendarId();
   // 1. Extend leaf task finish dates to preserve working-day durations
   allTasks.forEach(task => {
     if (!task.start || task.isMilestone) return;
     if (task.children && task.children.length > 0) return;
     const workDays = parseInt(task.duration) || 0;
     if (workDays <= 0) return;
-    const calId = task.calendarId || getDefaultCalendarId();
+    const calId = task.calendarId || defaultCalId;
+    // If scoped to a specific calendar, skip tasks not using it
+    if (forCalendarId && calId !== forCalendarId) return;
     task.finish = addWorkingDays(task.start, workDays, calId);
     task.duration = workDays + (workDays === 1 ? ' day' : ' days');
   });

@@ -468,10 +468,11 @@ function saveEditPanel() {
   const epCal = document.getElementById('ep-calendar');
   if (epCal) {
     const newCalId = epCal.value;
-    if (newCalId !== task.calendarId) {
+    const effectiveOld = task.calendarId || getDefaultCalendarId();
+    if (newCalId !== effectiveOld) {
       assignCalendarWithChildren(task, newCalId);
       invalidateHolidayCache();
-      recalcFinishDates();
+      recalcFinishDates(newCalId);
     }
   }
 
@@ -816,7 +817,7 @@ function deleteCalendar(id) {
   ensureDefaultCalendar();
   _selectedCalId = Object.keys(calendars)[0];
   invalidateHolidayCache();
-  recalcFinishDates();
+  recalcFinishDates(); // full recalc: tasks moved calendars
   renderSettingsBody();
   renderAll();
   if (currentTab === 'dati') renderDataTable();
@@ -845,7 +846,7 @@ function submitCalendarHoliday(calId) {
   if (!dateEl.value) { showToast('Select a date', 'error'); return; }
   calendars[calId].entries.push({ type: 'holiday', date: dateEl.value, label: labelEl.value || 'Holiday' });
   invalidateHolidayCache();
-  recalcFinishDates();
+  recalcFinishDates(calId);
   renderSettingsBody();
   renderAll();
   scheduleSave();
@@ -859,7 +860,7 @@ function submitCalendarClosure(calId) {
   if (startEl.value > endEl.value) { showToast('Start must be before end', 'error'); return; }
   calendars[calId].entries.push({ type: 'closure', startDate: startEl.value, endDate: endEl.value, label: labelEl.value || 'Closure' });
   invalidateHolidayCache();
-  recalcFinishDates();
+  recalcFinishDates(calId);
   renderSettingsBody();
   renderAll();
   scheduleSave();
@@ -876,7 +877,7 @@ function updateCalendarEntry(calId, idx, field, value) {
     renderSettingsBody();
   }
   invalidateHolidayCache();
-  recalcFinishDates();
+  recalcFinishDates(calId);
   renderAll();
   scheduleSave();
 }
@@ -884,7 +885,7 @@ function updateCalendarEntry(calId, idx, field, value) {
 function removeCalendarEntry(calId, idx) {
   calendars[calId].entries.splice(idx, 1);
   invalidateHolidayCache();
-  recalcFinishDates();
+  recalcFinishDates(calId);
   renderSettingsBody();
   renderAll();
   scheduleSave();
@@ -898,6 +899,7 @@ function openCalendarAssignModal() {
   const modal = document.getElementById('cal-assign-modal');
   const body = document.getElementById('cal-assign-body');
   const calIds = Object.keys(calendars);
+  const defaultCalId = getDefaultCalendarId();
 
   // Get Level 1 and Level 2 tasks
   const phases = allTasks.filter(t => t.depth <= 2);
@@ -910,8 +912,8 @@ function openCalendarAssignModal() {
   } else {
     // Calendar selector
     html += `<div style="margin-bottom:12px">
-      <label style="font-weight:600;font-size:.85rem">Select calendar:</label>
-      <select id="cal-assign-select" style="margin-left:8px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:.85rem">
+      <label style="font-weight:600;font-size:.85rem">Select calendar to assign:</label>
+      <select id="cal-assign-select" onchange="calAssignRefreshList()" style="margin-left:8px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:.85rem">
         ${calIds.map(id => `<option value="${id}">${esc(calendars[id].name)}${calendars[id].isDefault ? ' (default)' : ''}</option>`).join('')}
       </select>
     </div>`;
@@ -924,17 +926,8 @@ function openCalendarAssignModal() {
         <button class="add-row-btn" onclick="calAssignSelectAll(false)" style="font-size:.75rem;padding:2px 8px">Deselect all</button>
       </div>
     </div>`;
-    html += `<div class="cal-assign-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px">`;
-    phases.forEach(t => {
-      const indent = (t.depth - 1) * 20;
-      const calName = t.calendarId && calendars[t.calendarId] ? calendars[t.calendarId].name : '(default)';
-      html += `<label class="cal-assign-item" style="padding-left:${indent + 8}px">
-        <input type="checkbox" class="cal-assign-cb" value="${t.id}">
-        <span class="cal-assign-outline">${esc(t.outline)}</span>
-        <span class="cal-assign-name">${esc(t.name)}</span>
-        <span class="cal-assign-current" style="color:var(--grey-txt);font-size:.75rem;margin-left:auto">${esc(calName)}</span>
-      </label>`;
-    });
+    html += `<div class="cal-assign-list" id="cal-assign-list-container" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px">`;
+    html += _buildCalAssignListHTML(calIds[0], defaultCalId, phases);
     html += `</div>`;
 
     // Apply button
@@ -943,6 +936,36 @@ function openCalendarAssignModal() {
 
   body.innerHTML = html;
   modal.classList.add('open');
+}
+
+/** Build the inner HTML for the assign list, highlighting current assignments */
+function _buildCalAssignListHTML(selectedCalId, defaultCalId, phases) {
+  let html = '';
+  phases.forEach(t => {
+    const indent = (t.depth - 1) * 20;
+    const effectiveCal = t.calendarId || defaultCalId;
+    const cal = calendars[effectiveCal];
+    const calColor = cal ? cal.color : '#94A3B8';
+    const calName = cal ? cal.name : 'Default';
+    const alreadyAssigned = effectiveCal === selectedCalId;
+    html += `<label class="cal-assign-item${alreadyAssigned ? ' already-assigned' : ''}" style="padding-left:${indent + 8}px">
+      <input type="checkbox" class="cal-assign-cb" value="${t.id}"${alreadyAssigned ? ' checked disabled' : ''}>
+      <span class="cal-assign-outline">${esc(t.outline)}</span>
+      <span class="cal-assign-name">${esc(t.name)}</span>
+      <span class="cal-assign-cal-chip" style="background:${calColor}22;color:${calColor};border:1px solid ${calColor}44;border-radius:4px;padding:1px 6px;font-size:.7rem;margin-left:auto;white-space:nowrap">${esc(calName)}</span>
+    </label>`;
+  });
+  return html;
+}
+
+/** Refresh the assign list when the calendar selector changes */
+function calAssignRefreshList() {
+  const select = document.getElementById('cal-assign-select');
+  const container = document.getElementById('cal-assign-list-container');
+  if (!select || !container) return;
+  const defaultCalId = getDefaultCalendarId();
+  const phases = allTasks.filter(t => t.depth <= 2);
+  container.innerHTML = _buildCalAssignListHTML(select.value, defaultCalId, phases);
 }
 
 function closeCalendarAssignModal() {
@@ -961,20 +984,30 @@ function applyCalendarAssignment() {
   if (checked.length === 0) { showToast('Select at least one phase', 'error'); return; }
 
   snapshotUndo();
+  const defaultCalId = getDefaultCalendarId();
+  let changedCount = 0;
   checked.forEach(cb => {
     const taskId = parseInt(cb.value);
     const task = allTasks.find(t => t.id === taskId);
-    if (task) assignCalendarWithChildren(task, calId);
+    if (!task) return;
+    const currentCal = task.calendarId || defaultCalId;
+    if (currentCal === calId) return; // already on this calendar, skip
+    assignCalendarWithChildren(task, calId);
+    changedCount++;
   });
 
-  invalidateHolidayCache();
-  recalcFinishDates();
-  rebuildAfterChange();
-  renderAll();
-  if (currentTab === 'dati') renderDataTable();
-  scheduleSave();
+  if (changedCount > 0) {
+    invalidateHolidayCache();
+    recalcFinishDates(calId);
+    rebuildAfterChange();
+    renderAll();
+    if (currentTab === 'dati') renderDataTable();
+    scheduleSave();
+  }
   closeCalendarAssignModal();
-  showToast(`Calendar assigned to ${checked.length} phase(s)`, 'info', 2000);
+  showToast(changedCount > 0
+    ? `Calendar assigned to ${changedCount} phase(s)`
+    : 'No changes needed (already assigned)', 'info', 2000);
 }
 
 

@@ -126,7 +126,14 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
     else if (field === 'cost') { task.cost = el.value; }
     else if (field === 'sprint') { task.sprint = el.value; }
     else if (field === 'category') { task.category = el.value; }
-    else if (field === 'calendarId') { assignCalendarWithChildren(task, el.value); invalidateHolidayCache(); recalcFinishDates(); }
+    else if (field === 'calendarId') {
+      const oldCal = task.calendarId || getDefaultCalendarId();
+      if (el.value !== oldCal) {
+        assignCalendarWithChildren(task, el.value);
+        invalidateHolidayCache();
+        recalcFinishDates(el.value);
+      }
+    }
     else if (field === 'duration') {
       const newDays = parseInt(el.value) || 0;
       if (newDays > 0 && task.start) {

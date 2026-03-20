@@ -702,6 +702,7 @@ function aggregateParentProgress() {
     let childMinStart = Infinity;
     let childMaxFinish = -Infinity;
 
+    let totalChildWorkingDays = 0;
     task.children.forEach(c => {
       const days = (c.start && c.finish)
         ? Math.max(Math.round((c.finish - c.start) / MS_PER_DAY), 1)
@@ -710,6 +711,11 @@ function aggregateParentProgress() {
       weightedProgress += c.percentComplete * days;
       if (c.start && c.start.getTime() < childMinStart) childMinStart = c.start.getTime();
       if (c.finish && c.finish.getTime() > childMaxFinish) childMaxFinish = c.finish.getTime();
+      // Sum children's working days for parent duration
+      if (workingDaysMode) {
+        const childWd = parseInt(c.duration) || 0;
+        totalChildWorkingDays += childWd;
+      }
     });
 
     if (totalWeight > 0) {
@@ -718,7 +724,13 @@ function aggregateParentProgress() {
     // Aggregate dates from children
     if (childMinStart !== Infinity) task.start = new Date(childMinStart);
     if (childMaxFinish !== -Infinity) task.finish = new Date(childMaxFinish);
-    recalcDuration(task);
+    // For parent tasks in working days mode: use sum of children's working days
+    // This avoids counting holidays in gaps between children
+    if (workingDaysMode && totalChildWorkingDays > 0) {
+      task.duration = totalChildWorkingDays + (totalChildWorkingDays === 1 ? ' day' : ' days');
+    } else {
+      recalcDuration(task);
+    }
   }
 
   taskTree.forEach(t => aggregate(t));

@@ -79,10 +79,9 @@ function scheduleSave() {
 function saveProjectToStorage(projectId) {
   if (!projectId || !projects[projectId]) return;
   try {
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-    localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
+    AppStorage.setProjects(projects);
+    AppStorage.setCurrentProjectId(currentProjectId);
   } catch (e) {
-    console.warn('localStorage save failed:', e);
     showToast('Save failed — storage may be full. Export your data to avoid losing work.', 'error');
     updateSaveIndicator('Save failed - storage full');
   }
@@ -118,10 +117,9 @@ function saveCurrentProjectToStorage() {
     workingDaysMode: workingDaysMode
   };
   try {
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-    localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
+    AppStorage.setProjects(projects);
+    AppStorage.setCurrentProjectId(currentProjectId);
   } catch (e) {
-    console.warn('localStorage save failed:', e);
     showToast('Save failed — storage may be full. Export your data to avoid losing work.', 'error');
     updateSaveIndicator('Save failed - storage full');
   }
@@ -129,9 +127,8 @@ function saveCurrentProjectToStorage() {
 
 function loadProjectsFromStorage() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_PROJECTS);
-    if (raw) projects = JSON.parse(raw);
-    currentProjectId = localStorage.getItem(STORAGE_KEY_CURRENT);
+    projects = AppStorage.getProjects();
+    currentProjectId = AppStorage.getCurrentProjectId();
   } catch (e) {
     projects = {};
     currentProjectId = null;
@@ -200,7 +197,7 @@ function loadProjectById(id) {
   renderAll();
   if (currentTab === 'dati') renderDataTable();
   renderProjectSelector();
-  localStorage.setItem(STORAGE_KEY_CURRENT, id);
+  AppStorage.setCurrentProjectId(id);
 }
 
 function processLoadedData(data) {
@@ -275,10 +272,17 @@ async function createNewProject(name) {
   Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
   Object.assign(PRIORITY_COLORS, defaults.priorityColors);
 
+  // Reset calendars for the new project
+  calendars = {};
+  ensureDefaultCalendar();
+  invalidateHolidayCache();
+
   projects[id] = {
     name: trimmed, meta: {}, tasks: [],
     labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
-    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS }
+    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS },
+    calendars: JSON.parse(JSON.stringify(calendars)),
+    workingDaysMode: workingDaysMode
   };
   currentProjectId = id;
   projectMeta = {};
@@ -313,27 +317,22 @@ const _BUILTIN_PRIORITY_COLORS = {
 };
 
 function saveGlobalDefaults() {
-  try {
-    localStorage.setItem(STORAGE_KEY_DEFAULTS, JSON.stringify({
-      labelColors: { ...LABEL_COLORS },
-      bucketColors: { ...BUCKET_COLORS },
-      priorityColors: { ...PRIORITY_COLORS }
-    }));
-  } catch(e) { console.warn('Could not save defaults:', e); }
+  AppStorage.setDefaults({
+    labelColors: { ...LABEL_COLORS },
+    bucketColors: { ...BUCKET_COLORS },
+    priorityColors: { ...PRIORITY_COLORS }
+  });
 }
 
 function loadGlobalDefaults() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_DEFAULTS);
-    if (raw) {
-      const d = JSON.parse(raw);
-      return {
-        labelColors: d.labelColors || { ..._BUILTIN_LABEL_COLORS },
-        bucketColors: d.bucketColors || { ..._BUILTIN_BUCKET_COLORS },
-        priorityColors: d.priorityColors || { ..._BUILTIN_PRIORITY_COLORS }
-      };
-    }
-  } catch(e) {}
+  const d = AppStorage.getDefaults();
+  if (d) {
+    return {
+      labelColors: d.labelColors || { ..._BUILTIN_LABEL_COLORS },
+      bucketColors: d.bucketColors || { ..._BUILTIN_BUCKET_COLORS },
+      priorityColors: d.priorityColors || { ..._BUILTIN_PRIORITY_COLORS }
+    };
+  }
   return {
     labelColors: { ..._BUILTIN_LABEL_COLORS },
     bucketColors: { ..._BUILTIN_BUCKET_COLORS },
@@ -380,9 +379,13 @@ async function deleteCurrentProject() {
   if (!await showConfirm('Delete project "' + (projects[currentProjectId]?.name || '') + '"?', { title: 'Delete Project', danger: true, okLabel: 'Delete' })) return;
   delete projects[currentProjectId];
   const remaining = Object.keys(projects);
-  currentProjectId = remaining[0];
-  saveCurrentProjectToStorage();
-  loadProjectById(currentProjectId);
+  // Save the projects list BEFORE changing currentProjectId to avoid
+  // saveCurrentProjectToStorage overwriting the remaining project's data
+  try {
+    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+  } catch (e) { console.warn('localStorage save failed:', e); }
+  // Now load the remaining project (this sets currentProjectId and restores its data)
+  loadProjectById(remaining[0]);
 }
 
 
@@ -562,21 +565,30 @@ function recalcDuration(task) {
  * Recalculate finish dates after holidays change.
  * Preserves each leaf task's working-day duration and extends/shrinks
  * the finish date to skip newly added holidays. Then propagates dependencies.
+ * @param {string} [forCalendarId] - If provided, only recalc tasks using this specific calendar.
+ *                                    If omitted, recalcs all tasks (used for global changes like toggling working days mode).
  */
-function recalcFinishDates() {
+function recalcFinishDates(forCalendarId) {
   if (!workingDaysMode) return;
+  const defaultCalId = getDefaultCalendarId();
+  // 1. Extend leaf task finish dates to preserve working-day durations
   allTasks.forEach(task => {
     if (!task.start || task.isMilestone) return;
-    if (task.children && task.children.length > 0) return; // parents aggregate from children
+    if (task.children && task.children.length > 0) return;
     const workDays = parseInt(task.duration) || 0;
     if (workDays <= 0) return;
-    const calId = task.calendarId || getDefaultCalendarId();
+    const calId = task.calendarId || defaultCalId;
+    // If scoped to a specific calendar, skip tasks not using it
+    if (forCalendarId && calId !== forCalendarId) return;
     task.finish = addWorkingDays(task.start, workDays, calId);
     task.duration = workDays + (workDays === 1 ? ' day' : ' days');
   });
+  // 2. Propagate dependencies so downstream tasks shift
   allTasks.forEach(task => {
     if (task.dependsOn) propagateDependencies(task);
   });
+  // 3. Rebuild tree to aggregate parent dates from children
+  rebuildAfterChange();
 }
 
 /** Helper: rebuild all derived data after a change */

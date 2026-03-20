@@ -723,6 +723,9 @@ input:focus-visible, textarea:focus-visible {
 .cal-assign-outline{color:var(--grey-txt);font-size:.75rem;min-width:40px}
 .cal-assign-name{font-weight:500}
 .cal-assign-current{white-space:nowrap}
+.cal-assign-item.already-assigned{opacity:.55;cursor:default}
+.cal-assign-item.already-assigned:hover{background:transparent}
+.cal-assign-item.already-assigned .cal-assign-name::after{content:" (assigned)";font-size:.7rem;font-weight:400;color:var(--grey-txt)}
 
 /* ===== CUSTOM DIALOG ===== */
 .dialog-overlay{position:fixed;inset:0;z-index:9000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0);backdrop-filter:blur(0);transition:background .2s,backdrop-filter .2s;opacity:0}

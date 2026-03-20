@@ -6,7 +6,7 @@
 <title>PlanView - Gantt Roadmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=31">
+<link rel="stylesheet" href="css/style.css?v=35">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
@@ -286,18 +286,23 @@
 </div>
 
 <!-- SCRIPTS (order matters: state → utils → dialog → data → render → ui → app) -->
-<script src="js/state.js?v=31"></script>
-<script src="js/utils.js?v=31"></script>
-<script src="js/dialog.js?v=31"></script>
-<script src="js/data.js?v=31"></script>
-<script src="js/render.js?v=31"></script>
-<script src="js/ui.js?v=31"></script>
-<script src="js/export.js?v=31"></script>
-<script src="js/app.js?v=31"></script>
+<script src="js/state.js?v=35"></script>
+<script src="js/storage.js?v=35"></script>
+<script src="js/utils.js?v=35"></script>
+<script src="js/dialog.js?v=35"></script>
+<script src="js/data.js?v=35"></script>
+<script src="js/render.js?v=35"></script>
+<script src="js/ui.js?v=35"></script>
+<script src="js/ui-editpanel.js?v=35"></script>
+<script src="js/ui-settings.js?v=35"></script>
+<script src="js/ui-tasks.js?v=35"></script>
+<script src="js/ui-datatable.js?v=35"></script>
+<script src="js/export.js?v=35"></script>
+<script src="js/app.js?v=35"></script>
 <script>
 // Pre-cache JS sources in localStorage for HTML export
 (function() {
-  var SRC_VERSION = 'v21';
+  var SRC_VERSION = 'v22';
   var VERSION_KEY = 'planview-src-version';
   // Skip if already cached at current version
   if (localStorage.getItem(VERSION_KEY) === SRC_VERSION) return;

@@ -1,5 +1,6 @@
 /* ===================================================================
-   UI.JS — Edit panel, settings modal, tooltip, interactions
+   UI.JS — Core UI: export dropdown, tooltip, navigation, interactions,
+   filters, tab system, table layout, column picker, edit mode toggle
    =================================================================== */
 
 /* ---------- EXPORT DROPDOWN ---------- */
@@ -1324,7 +1325,7 @@ function switchTab(tab) {
   }
 
   currentTab = tab;
-  
+
   // Restore new tab filters and UI controls
   const newState = viewStates[currentTab];
   if (newState) {
@@ -1353,7 +1354,7 @@ function switchTab(tab) {
     renderDataTable();
     requestAnimationFrame(() => { dw.style.opacity = '1'; });
   }
-  
+
   const editBtn = document.getElementById('data-edit-btn');
   if (editBtn) editBtn.style.display = tab === 'dati' ? '' : 'none';
 

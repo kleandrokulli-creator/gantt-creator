@@ -396,6 +396,10 @@ function renderTimelineBars(dpx) {
     d = next;
   }
 
+  // Build holiday set early so weekend shading can skip holiday-covered weekends
+  const _hasCalendars = Object.keys(calendars).length > 0;
+  const _scopedHolidays = _hasCalendars ? buildScopedHolidayLookup() : new Set();
+
   // Weekend shading (only at week/day zoom, or always in working-days mode)
   if (currentZoom !== 'month' || workingDaysMode) {
     const satW = dpx[currentZoom]; // 1 day width
@@ -405,27 +409,30 @@ function renderTimelineBars(dpx) {
       while (wd2 <= maxDate) {
         const dayOfWeek = wd2.getDay();
         if (dayOfWeek === 0 || dayOfWeek === 6) {
-          const wx = dateToPxR(wd2, dpx);
-          html += `<div class="tl-weekend" style="left:${wx}px;width:${Math.max(satW, 1)}px"></div>`;
+          // Skip weekend shading if this day is covered by a holiday/closure
+          const ds = wd2.getFullYear() + '-' + String(wd2.getMonth() + 1).padStart(2, '0') + '-' + String(wd2.getDate()).padStart(2, '0');
+          if (!_scopedHolidays.has(ds)) {
+            const wx = dateToPxR(wd2, dpx);
+            html += `<div class="tl-weekend" style="left:${wx}px;width:${Math.max(satW, 1)}px"></div>`;
+          }
         }
         wd2 = new Date(wd2.getTime() + MS_PER_DAY);
       }
     }
   }
 
-  // Holiday shading (scoped to current view's calendars, bridged weekends)
-  if (workingDaysMode && Object.keys(calendars).length > 0) {
-    const scopedHolidays = buildScopedHolidayLookup();
+  // Holiday shading (scoped to current view's calendars)
+  // Always show holiday shading regardless of workingDaysMode
+  if (_hasCalendars && _scopedHolidays.size > 0) {
     const bridgedWeekends = buildScopedBridgedWeekends();
     const dayW = dpx[currentZoom];
     const opacity = dayW < 4 ? '55' : '40';
     const colW = Math.max(dayW, 2);
 
-    // Shade actual holidays (weekday only)
-    for (const dateStr of scopedHolidays) {
+    // Shade all holidays including weekends that fall within a closure
+    for (const dateStr of _scopedHolidays) {
       const hDate = new Date(dateStr + 'T00:00:00');
       if (hDate < minDate || hDate > maxDate) continue;
-      if (isWeekend(hDate)) continue;
       const x = dateToPxR(hDate, dpx);
       const infos = getScopedHolidayInfo(dateStr);
       if (infos.length === 0) continue;
@@ -446,8 +453,9 @@ function renderTimelineBars(dpx) {
       html += `<div class="tl-holiday" style="left:${x}px;width:${colW}px;background:${bg}" title="${esc(tooltip)}"></div>`;
     }
 
-    // Shade bridged weekends (Sat/Sun between holidays) so continuous blocks look unified
+    // Shade bridged weekends (Sat/Sun between holidays, not already in a closure)
     for (const dateStr of bridgedWeekends) {
+      if (_scopedHolidays.has(dateStr)) continue; // already rendered as holiday
       const wDate = new Date(dateStr + 'T00:00:00');
       if (wDate < minDate || wDate > maxDate) continue;
       const x = dateToPxR(wDate, dpx);

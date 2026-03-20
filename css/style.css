@@ -77,9 +77,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .toolbar::-webkit-scrollbar{height:0}
 .toolbar .search-box{display:flex;align-items:center;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:0 .6rem;height:30px;min-width:140px;max-width:180px}
 .toolbar .search-box input{border:none;background:none;outline:none;color:var(--body-fg);font-family:inherit;font-size:.8rem;width:100%}
-.toolbar select,.toolbar button{height:30px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--body-fg);font-family:inherit;font-size:.78rem;padding:0 .55rem;cursor:pointer;transition:all .15s;white-space:nowrap}
-.toolbar select:hover,.toolbar button:hover{border-color:var(--blue);background:rgba(59,130,246,.06)}
-.toolbar button.active,.toolbar button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.toolbar select,.toolbar > .tb-group button,.toolbar > .tb-group > .tb-dropdown > button{height:30px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--body-fg);font-family:inherit;font-size:.78rem;padding:0 .55rem;cursor:pointer;transition:all .15s;white-space:nowrap}
+.toolbar select:hover,.toolbar > .tb-group button:hover,.toolbar > .tb-group > .tb-dropdown > button:hover{border-color:var(--blue);background:rgba(59,130,246,.06)}
+.toolbar > .tb-group button.active,.toolbar > .tb-group button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
 .toolbar .sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
 .tb-group{display:flex;align-items:center;gap:.35rem;flex-shrink:0}
 .btn-icon{display:inline-flex;align-items:center;gap:.25rem}

@@ -6,7 +6,7 @@
 <title>PlanView - Gantt Roadmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=26">
+<link rel="stylesheet" href="css/style.css?v=27">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
@@ -51,91 +51,131 @@
 
   <!-- TOOLBAR -->
   <div class="toolbar" id="toolbar">
-    <div class="search-box" role="search">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <input type="text" id="search-input" placeholder="Search tasks..." aria-label="Search tasks" oninput="applyFilters()">
+    <!-- GROUP 1: Search & Filters -->
+    <div class="tb-group">
+      <div class="search-box" role="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input type="text" id="search-input" placeholder="Search tasks..." aria-label="Search tasks" oninput="applyFilters()">
+      </div>
+      <select id="filter-label" aria-label="Filter by label" onchange="applyFilters()"><option value="">All labels</option></select>
+      <select id="filter-bucket" aria-label="Filter by bucket" onchange="applyFilters()"><option value="">All buckets</option></select>
     </div>
-    <div class="sep"></div>
-    <select id="filter-label" aria-label="Filter by label" onchange="applyFilters()"><option value="">All labels</option></select>
-    <select id="filter-bucket" aria-label="Filter by bucket" onchange="applyFilters()"><option value="">All buckets</option></select>
+
     <div class="sep tab-roadmap"></div>
-    <button onclick="setZoom('month')" id="zoom-month" class="active tab-roadmap">Month</button>
-    <button onclick="setZoom('week')" id="zoom-week" class="tab-roadmap">Week</button>
-    <button onclick="setZoom('day')" id="zoom-day" class="tab-roadmap">Day</button>
-    <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm tab-roadmap" title="Toggle working days (Mon-Fri) / calendar days">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
-      <span>Mon-Fri</span>
-    </button>
+
+    <!-- GROUP 2: Zoom & Calendar (Roadmap only) -->
+    <div class="tb-group tab-roadmap">
+      <button onclick="setZoom('month')" id="zoom-month" class="active">Month</button>
+      <button onclick="setZoom('week')" id="zoom-week">Week</button>
+      <button onclick="setZoom('day')" id="zoom-day">Day</button>
+      <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" title="Toggle working days (Mon-Fri) / calendar days">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+        <span>Mon-Fri</span>
+      </button>
+    </div>
+
     <div class="sep tab-roadmap"></div>
-    <select id="depth-select" class="tab-roadmap" onchange="setDepth(this.value)" title="Visible depth levels">
-      <option value="1" selected>Level 1</option>
-      <option value="2">Levels 1-2</option>
-      <option value="3">Levels 1-3</option>
-      <option value="0">All levels</option>
-    </select>
-    <button onclick="toggleMilestoneInline()" id="ms-inline-btn" class="btn-icon tab-roadmap" title="Milestone inline/separate">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
-      <span id="ms-inline-label">MS Inline</span>
-    </button>
-    <button onclick="toggleArrows()" id="arrows-btn" class="btn-icon tab-roadmap" title="Toggle dependency arrows">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-      <span id="arrows-label">Hide Dependencies</span>
-    </button>
-    <div class="sep tab-roadmap"></div>
-    <button onclick="scrollToToday()" class="btn-icon tab-roadmap">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-      Today
-    </button>
-    <button onclick="toggleExpandAll()" id="expand-btn" class="btn-icon">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
-      <span id="expand-label">Expand all</span>
-    </button>
-    <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon tab-roadmap" title="Show/hide legend">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Legend
-    </button>
+
+    <!-- GROUP 3: View controls (Roadmap only) -->
+    <div class="tb-group tab-roadmap">
+      <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">
+        <option value="1" selected>Level 1</option>
+        <option value="2">Levels 1-2</option>
+        <option value="3">Levels 1-3</option>
+        <option value="0">All levels</option>
+      </select>
+      <button onclick="toggleMilestoneInline()" id="ms-inline-btn" class="btn-icon" title="Milestone inline/separate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+        <span id="ms-inline-label">MS Inline</span>
+      </button>
+      <button onclick="toggleArrows()" id="arrows-btn" class="btn-icon" title="Toggle dependency arrows">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+        <span id="arrows-label">Deps</span>
+      </button>
+      <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon" title="Show/hide legend">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Legend
+      </button>
+      <button onclick="scrollToToday()" class="btn-icon" title="Scroll to today">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Today
+      </button>
+    </div>
+
     <div class="sep"></div>
-    <button onclick="addNewTask()" class="btn-icon" title="Add task">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      Add task
-    </button>
-    <button onclick="deleteSelectedTasks()" id="btn-delete-sel" class="btn-icon" style="display:none" title="Delete selected">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 002 2h10a2 2 0 002-2V6"/></svg>
-      Delete selected
-    </button>
-    <button onclick="undoEdit()" class="btn-icon" id="btn-undo" title="Undo (Ctrl+Z)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h13a4 4 0 010 8H7M3 10l4-4M3 10l4 4"/></svg>
-      Undo
-    </button>
-    <button onclick="exportExcel()" class="btn-icon" title="Export Excel">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h2l2 3 2-3h2"/></svg>
-      Excel
-    </button>
-    <button onclick="exportPNG()" class="btn-icon tab-roadmap" title="Download PNG">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-      PNG
-    </button>
-    <button onclick="exportCopyPNG()" class="btn-icon tab-roadmap" title="Copy PNG to clipboard">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-      Copy
-    </button>
-    <button onclick="exportPPTX()" class="btn-icon tab-roadmap" title="Export PowerPoint">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h2v4H9z"/><path d="M13 11h2v6h-2z"/></svg>
-      PPTX
-    </button>
-    <button onclick="showHTMLExportDialog()" class="btn-icon tab-roadmap" title="Export interactive HTML">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M10 9l-3 3 3 3M14 9l3 3-3 3"/></svg>
-      HTML
-    </button>
-    <button onclick="openSettings()" class="btn-icon" title="Settings">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      Settings
-    </button>
-    <button onclick="showAllTasks()" id="btn-show-all" class="btn-icon" style="display:none" title="Unmute all tasks">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><path d="M1 1l22 22"/></svg>
-      Unmute All
-    </button>
+
+    <!-- GROUP 4: Actions (shared) -->
+    <div class="tb-group">
+      <button onclick="addNewTask()" class="btn-icon" title="Add task">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Add
+      </button>
+      <button onclick="toggleExpandAll()" id="expand-btn" class="btn-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
+        <span id="expand-label">Expand</span>
+      </button>
+      <button onclick="undoEdit()" class="btn-icon" id="btn-undo" title="Undo (Ctrl+Z)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h13a4 4 0 010 8H7M3 10l4-4M3 10l4 4"/></svg>
+        Undo
+      </button>
+      <button onclick="deleteSelectedTasks()" id="btn-delete-sel" class="btn-icon" style="display:none" title="Delete selected">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 002 2h10a2 2 0 002-2V6"/></svg>
+        Delete
+      </button>
+      <button onclick="showAllTasks()" id="btn-show-all" class="btn-icon" style="display:none" title="Unmute all tasks">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><path d="M1 1l22 22"/></svg>
+        Unmute
+      </button>
+    </div>
+
     <div class="sep"></div>
+
+    <!-- GROUP 5: Export dropdown + Settings -->
+    <div class="tb-group">
+      <div class="tb-dropdown" id="export-dropdown">
+        <button onclick="toggleExportMenu()" class="btn-icon" title="Export options">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          Export
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;margin-left:-2px"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="tb-dropdown-menu" id="export-menu">
+          <button onclick="exportExcel();closeExportMenu()" class="tb-dropdown-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h2l2 3 2-3h2"/></svg>
+            Export Excel
+          </button>
+          <button onclick="exportPNG();closeExportMenu()" class="tb-dropdown-item tab-roadmap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            Download PNG
+          </button>
+          <button onclick="exportCopyPNG();closeExportMenu()" class="tb-dropdown-item tab-roadmap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Copy PNG
+          </button>
+          <button onclick="exportPPTX();closeExportMenu()" class="tb-dropdown-item tab-roadmap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h2v4H9z"/><path d="M13 11h2v6h-2z"/></svg>
+            Export PPTX
+          </button>
+          <button onclick="showHTMLExportDialog();closeExportMenu()" class="tb-dropdown-item tab-roadmap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M10 9l-3 3 3 3M14 9l3 3-3 3"/></svg>
+            Export HTML
+          </button>
+          <div class="tb-dropdown-sep"></div>
+          <button onclick="saveAsTemplate();closeExportMenu()" class="tb-dropdown-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+            Save as Template
+          </button>
+          <button onclick="showTemplateModal();closeExportMenu()" class="tb-dropdown-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Browse Templates
+          </button>
+        </div>
+      </div>
+      <button onclick="openSettings()" class="btn-icon" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Settings
+      </button>
+    </div>
+
     <span class="save-indicator" id="save-indicator"></span>
   </div>
 

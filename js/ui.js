@@ -2,6 +2,31 @@
    UI.JS — Edit panel, settings modal, tooltip, interactions
    =================================================================== */
 
+/* ---------- EXPORT DROPDOWN ---------- */
+
+function toggleExportMenu() {
+  const menu = document.getElementById('export-menu');
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  menu.classList.toggle('open', !isOpen);
+  if (!isOpen) {
+    // Close on outside click
+    setTimeout(() => {
+      document.addEventListener('click', function _closeExport(e) {
+        if (!e.target.closest('#export-dropdown')) {
+          menu.classList.remove('open');
+          document.removeEventListener('click', _closeExport);
+        }
+      });
+    }, 0);
+  }
+}
+
+function closeExportMenu() {
+  const menu = document.getElementById('export-menu');
+  if (menu) menu.classList.remove('open');
+}
+
 /* ---------- EDIT PANEL ---------- */
 
 let _epInitialAutoColor = '';   // tracks the auto-color when panel first opened
@@ -730,10 +755,10 @@ function toggleArrows() {
   if (btn && lbl) {
     if (showArrows) {
       btn.classList.remove('dim');
-      lbl.innerText = 'Hide Dependencies';
+      lbl.innerText = 'Deps';
     } else {
       btn.classList.add('dim');
-      lbl.innerText = 'Show Dependencies';
+      lbl.innerText = 'Deps';
     }
   }
   renderAll();
@@ -803,7 +828,7 @@ function toggleExpandAll() {
     // Collapse: add all parents to collapsedSet (needed when visibleDepth=0 allows all by default)
     allTasks.forEach(t => { if (t.children.length > 0) getState().collapsedSet.add(t.outline); });
   }
-  DOM.expandLabel.textContent = getState().allExpanded ? 'Collapse all' : 'Expand all';
+  DOM.expandLabel.textContent = getState().allExpanded ? 'Collapse' : 'Expand';
   renderAll();
   if (currentTab === 'dati') renderDataTable();
 }
@@ -922,7 +947,7 @@ function switchTab(tab) {
     const ds = DOM.depthSelect;
     if (ds) ds.value = newState.visibleDepth;
     const elbl = DOM.expandLabel;
-    if (elbl) elbl.textContent = newState.allExpanded ? 'Collapse all' : 'Expand all';
+    if (elbl) elbl.textContent = newState.allExpanded ? 'Collapse' : 'Expand';
   }
 
   document.querySelectorAll('.tab-bar .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
@@ -1382,7 +1407,7 @@ function showTemplateModal() {
 
   // Custom templates
   html += '<div style="margin:1rem 0 .4rem;font-size:.75rem;font-weight:600;text-transform:uppercase;color:var(--grey-txt);letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between">Custom';
-  html += '<button onclick="saveAsTemplate();document.getElementById(\'template-modal-overlay\').remove()" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:.75rem;cursor:pointer;font-family:inherit">+ Save Current</button>';
+  html += '<button onclick="document.getElementById(\'template-modal-overlay\').remove();saveAsTemplate()" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:.75rem;cursor:pointer;font-family:inherit">+ Save Current</button>';
   html += '</div>';
   html += '<div class="template-modal-list">';
   if (custom.length === 0) {

@@ -119,6 +119,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M10 9l-3 3 3 3M14 9l3 3-3 3"/></svg>
       HTML
     </button>
+    <button onclick="openCalendarAssignModal()" class="btn-icon" title="Assign calendars to phases">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+      Calendars
+    </button>
     <button onclick="openSettings()" class="btn-icon" title="Settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       Settings
@@ -210,8 +214,20 @@
       <div class="mtab active" data-stab="labels" onclick="switchSettingsTab('labels')">Labels</div>
       <div class="mtab" data-stab="buckets" onclick="switchSettingsTab('buckets')">Buckets</div>
       <div class="mtab" data-stab="priority" onclick="switchSettingsTab('priority')">Priority</div>
+      <div class="mtab" data-stab="calendar" onclick="switchSettingsTab('calendar')">Calendar</div>
     </div>
     <div class="modal-body" id="settings-body"></div>
+  </div>
+</div>
+
+<!-- CALENDAR ASSIGNMENT MODAL -->
+<div class="modal-overlay" id="cal-assign-modal">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h2>Assign Calendar</h2>
+      <button class="modal-close" onclick="closeCalendarAssignModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body" id="cal-assign-body"></div>
   </div>
 </div>
 
@@ -224,15 +240,35 @@
 <script src="js/export.js?v=21"></script>
 <script src="js/app.js?v=21"></script>
 <script>
-// Pre-cache JS sources in localStorage for HTML export (runs once when loaded via HTTP)
+// Pre-cache JS sources in localStorage for HTML export
 (function() {
-  if (location.protocol === 'file:') return; // skip on file://, use cache from previous HTTP load
-  var files = { 'style.css': 'css/style.css', 'state.js': 'js/state.js', 'utils.js': 'js/utils.js', 'data.js': 'js/data.js', 'render.js': 'js/render.js' };
-  Object.keys(files).forEach(function(key) {
-    fetch(files[key] + '?t=' + Date.now()).then(function(r) { return r.text(); }).then(function(t) {
-      localStorage.setItem('planview-src-' + key, t);
-    }).catch(function() {});
-  });
+  var SRC_VERSION = 'v21';
+  var VERSION_KEY = 'planview-src-version';
+  // Skip if already cached at current version
+  if (localStorage.getItem(VERSION_KEY) === SRC_VERSION) return;
+  var files = { 'state.js': 'js/state.js', 'utils.js': 'js/utils.js', 'data.js': 'js/data.js', 'render.js': 'js/render.js' };
+  var keys = Object.keys(files);
+  if (location.protocol === 'file:') {
+    // On file://, try sync XHR (works in some browsers)
+    keys.forEach(function(key) {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', files[key], false);
+        xhr.send();
+        if (xhr.responseText) localStorage.setItem('planview-src-' + key, xhr.responseText);
+      } catch(e) {}
+    });
+    localStorage.setItem(VERSION_KEY, SRC_VERSION);
+  } else {
+    // On HTTP, use fetch
+    var done = 0;
+    keys.forEach(function(key) {
+      fetch(files[key] + '?t=' + Date.now()).then(function(r) { return r.text(); }).then(function(t) {
+        localStorage.setItem('planview-src-' + key, t);
+        if (++done === keys.length) localStorage.setItem(VERSION_KEY, SRC_VERSION);
+      }).catch(function() { done++; });
+    });
+  }
 })();
 </script>
 

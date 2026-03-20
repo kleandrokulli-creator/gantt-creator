@@ -31,7 +31,7 @@ const DEFAULT_COLUMN_WIDTHS = {
   select:36, taskNum:36, outline:60, name:200, start:110, finish:110,
   duration:80, milestone:40, labels:120, bucket:100, priority:90,
   pct:130, deps:110, effort:80, notes:140, assigned:110, status:100,
-  cost:80, sprint:80, category:100
+  cost:80, sprint:80, category:100, calendar:110
 };
 
 // Status options for task status dropdowns
@@ -64,6 +64,8 @@ let currentZoom = 'month';
 let minDate, maxDate, totalDays, canvasWidth;
 let filteredTree = [];
 let selectedRows = new Set();
+let workingDaysMode = true;   // true = working days (Mon-Fri), skip weekends & holidays
+let calendars = {};            // project-level holiday calendars { calId: { name, isDefault, entries[], color } }
 let currentTab = 'roadmap';
 let undoStack = [];
 const MAX_UNDO = 20;
@@ -101,6 +103,7 @@ const ALL_COLUMNS = [
   { id: 'cost',      label: 'Budget/Cost', defaultVisible: false },
   { id: 'sprint',    label: 'Sprint',      defaultVisible: false },
   { id: 'category',  label: 'Category',    defaultVisible: false },
+  { id: 'calendar',  label: 'Calendar',    defaultVisible: false },
 ];
 let visibleColumns = new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.id));
 

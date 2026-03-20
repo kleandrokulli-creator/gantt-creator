@@ -372,6 +372,51 @@ function renderTimelineBars(dpx) {
     d = next;
   }
 
+  // Holiday shading (scoped to current view's calendars, bridged weekends)
+  if (workingDaysMode && Object.keys(calendars).length > 0) {
+    const scopedHolidays = buildScopedHolidayLookup();
+    const bridgedWeekends = buildScopedBridgedWeekends();
+    const dayW = dpx[currentZoom];
+    const opacity = dayW < 4 ? '55' : '40';
+    const colW = Math.max(dayW, 2);
+
+    // Shade actual holidays (weekday only)
+    for (const dateStr of scopedHolidays) {
+      const hDate = new Date(dateStr + 'T00:00:00');
+      if (hDate < minDate || hDate > maxDate) continue;
+      if (isWeekend(hDate)) continue;
+      const x = dateToPxR(hDate, dpx);
+      const infos = getScopedHolidayInfo(dateStr);
+      if (infos.length === 0) continue;
+      const tooltip = infos.map(i => `${i.calendarName}: ${i.label}`).join(' / ');
+      let bg;
+      if (infos.length === 1) {
+        bg = infos[0].color + opacity;
+      } else {
+        const stripeW = 6;
+        const stops = [];
+        infos.forEach((info, i) => {
+          const s = ((i * stripeW) / (infos.length * stripeW) * 100).toFixed(1);
+          const e = (((i + 1) * stripeW) / (infos.length * stripeW) * 100).toFixed(1);
+          stops.push(`${info.color}${opacity} ${s}%`, `${info.color}${opacity} ${e}%`);
+        });
+        bg = `repeating-linear-gradient(135deg, ${stops.join(', ')})`;
+      }
+      html += `<div class="tl-holiday" style="left:${x}px;width:${colW}px;background:${bg}" title="${esc(tooltip)}"></div>`;
+    }
+
+    // Shade bridged weekends (Sat/Sun between holidays) so continuous blocks look unified
+    for (const dateStr of bridgedWeekends) {
+      const wDate = new Date(dateStr + 'T00:00:00');
+      if (wDate < minDate || wDate > maxDate) continue;
+      const x = dateToPxR(wDate, dpx);
+      const scopedIds = getScopedCalendarIds();
+      const bridgeColor = scopedIds.length === 1 && calendars[scopedIds[0]]
+        ? calendars[scopedIds[0]].color || '#EF4444' : '#EF4444';
+      html += `<div class="tl-holiday" style="left:${x}px;width:${colW}px;background:${bridgeColor}${dayW < 4 ? '30' : '20'}" title="Weekend (holiday bridge)"></div>`;
+    }
+  }
+
   // Today line
   const today = new Date(); today.setHours(0, 0, 0, 0);
   if (today >= minDate && today <= maxDate) {
@@ -396,7 +441,8 @@ function renderTimelineBars(dpx) {
     }
   }
 
-  // Task bars
+  // Task bars — use scoped holiday set for splitting (matches shading)
+  const scopedHolidaySet = workingDaysMode ? buildScopedHolidayLookup() : new Set();
   const todayTime = new Date().setHours(0, 0, 0, 0);
   visibleRows.forEach((r, idx) => {
     const task = r.task;
@@ -431,16 +477,64 @@ function renderTimelineBars(dpx) {
         onclick="handleBarClick(${task.id},${r.hasChildren})" onmouseenter="showTooltip(event,${task.id})" onmouseleave="hideTooltip()" onmousemove="moveTooltip(event)">${starSVG(msSize, msColor)}</div>`;
     } else {
       // Normal bar (leaf task or collapsed parent)
-      const barW = Math.max(x2 - x1, 4);
       const barH = 18;
       const barY = y + (rowH - barH) / 2;
       const cls = r.hasChildren ? 'summary' : '';
-      const label = barW > 50 ? task.name : '';
-      html += `<div class="tl-bar ${cls}${overdueClass}${mutedCls}" style="left:${x1}px;top:${barY}px;width:${barW}px;height:${barH}px;background:${barBg}"
-        onclick="handleBarClick(${task.id},${r.hasChildren})" onmouseenter="showTooltip(event,${task.id})" onmouseleave="hideTooltip()" onmousemove="moveTooltip(event)">
-        <div class="bar-progress" style="width:${pct}%"></div>
-        ${label ? `<div class="bar-label">${esc(label)}</div>` : ''}
-      </div>`;
+      const shouldSplit = workingDaysMode && task.finish && scopedHolidaySet.size > 0;
+      const holidayGaps = shouldSplit ? findHolidayGaps(task.start, task.finish, scopedHolidaySet) : [];
+
+      if (holidayGaps.length > 0) {
+        // Split bar into segments around closure gaps
+        const segments = [];
+        let segStart = task.start;
+        for (const gap of holidayGaps) {
+          if (gap.start > segStart) {
+            segments.push({ start: new Date(segStart), end: new Date(gap.start) });
+          }
+          segStart = gap.end;
+        }
+        if (segStart < task.finish) {
+          segments.push({ start: new Date(segStart), end: new Date(task.finish) });
+        }
+        // Render each segment
+        const totalBarW = Math.max(x2 - x1, 4);
+        const labelRendered = false;
+        segments.forEach((seg, si) => {
+          const sx1 = dateToPxR(seg.start, dpx);
+          const sx2 = dateToPxR(seg.end, dpx);
+          const segW = Math.max(sx2 - sx1, 2);
+          // Progress: distribute proportionally across segments
+          const segRatio = segW / totalBarW;
+          const segPctW = Math.min(pct * (totalBarW / segW), 100);
+          // Compute which portion of progress falls in this segment
+          const segStartRatio = (sx1 - x1) / totalBarW;
+          const segEndRatio = (sx1 - x1 + segW) / totalBarW;
+          let segProgress = 0;
+          if (pct / 100 > segStartRatio) {
+            segProgress = Math.min((pct / 100 - segStartRatio) / (segEndRatio - segStartRatio), 1) * 100;
+          }
+          const segLabel = si === 0 && segW > 50 ? task.name : '';
+          // Rounded ends: first segment gets left radius, last gets right radius
+          const borderRadius = segments.length === 1 ? '4px'
+            : si === 0 ? '4px 0 0 4px'
+            : si === segments.length - 1 ? '0 4px 4px 0'
+            : '0';
+          html += `<div class="tl-bar ${cls}${overdueClass}${mutedCls}" style="left:${sx1}px;top:${barY}px;width:${segW}px;height:${barH}px;background:${barBg};border-radius:${borderRadius}"
+            onclick="handleBarClick(${task.id},${r.hasChildren})" onmouseenter="showTooltip(event,${task.id})" onmouseleave="hideTooltip()" onmousemove="moveTooltip(event)">
+            <div class="bar-progress" style="width:${segProgress}%;border-radius:${borderRadius}"></div>
+            ${segLabel ? `<div class="bar-label">${esc(segLabel)}</div>` : ''}
+          </div>`;
+        });
+      } else {
+        // Single continuous bar (no closures or Month zoom)
+        const barW = Math.max(x2 - x1, 4);
+        const label = barW > 50 ? task.name : '';
+        html += `<div class="tl-bar ${cls}${overdueClass}${mutedCls}" style="left:${x1}px;top:${barY}px;width:${barW}px;height:${barH}px;background:${barBg}"
+          onclick="handleBarClick(${task.id},${r.hasChildren})" onmouseenter="showTooltip(event,${task.id})" onmouseleave="hideTooltip()" onmousemove="moveTooltip(event)">
+          <div class="bar-progress" style="width:${pct}%"></div>
+          ${label ? `<div class="bar-label">${esc(label)}</div>` : ''}
+        </div>`;
+      }
     }
     // Inline milestones with collision avoidance
     if (r.inlineMilestones.length > 0) {
@@ -567,7 +661,7 @@ function renderDataTable() {
   // Build visible column list in order
   const visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
   // Map column id -> sortable index for backwards-compatible sorting
-  const SORT_MAP = { taskNum:1, outline:2, name:3, start:4, finish:5, duration:6, milestone:7, labels:8, bucket:9, priority:10, pct:11, deps:12, effort:13, notes:14, assigned:15, status:16, cost:17, sprint:18, category:19 };
+  const SORT_MAP = { taskNum:1, outline:2, name:3, start:4, finish:5, duration:6, milestone:7, labels:8, bucket:9, priority:10, pct:11, deps:12, effort:13, notes:14, assigned:15, status:16, cost:17, sprint:18, category:19, calendar:20 };
   // Default min-widths per column type
   const DEFAULT_WIDTHS = DEFAULT_COLUMN_WIDTHS;
 
@@ -666,7 +760,7 @@ function renderDataTable() {
           case 'name': rowContent += `<td data-col="name"><div class="task-name-cell">${indentHtml}${typeIcon}<input type="text" value="${esc(t.name)}" data-field="name" data-id="${t.id}"></div></td>`; break;
           case 'start': rowContent += `<td data-col="start"><input type="date" value="${startStr}" data-field="start" data-id="${t.id}"></td>`; break;
           case 'finish': rowContent += `<td data-col="finish"><input type="date" value="${finishStr}" data-field="finish" data-id="${t.id}"></td>`; break;
-          case 'duration': rowContent += `<td data-col="duration" style="font-size:.78rem;color:var(--grey-txt)">${esc(t.duration)}</td>`; break;
+          case 'duration': rowContent += `<td data-col="duration"><input type="number" min="0" value="${parseInt(t.duration) || 0}" data-field="duration" data-id="${t.id}" style="width:55px;font-size:.78rem" title="${workingDaysMode ? 'Working days (Mon-Fri, excl. holidays)' : 'Calendar days'}"></td>`; break;
           case 'milestone': rowContent += `<td data-col="milestone" style="text-align:center"><input type="checkbox" class="ms-cb" data-field="isMilestone" data-id="${t.id}" ${t.isMilestone ? 'checked' : ''} title="Milestone"></td>`; break;
           case 'labels': rowContent += `<td data-col="labels"><div class="cell-tags cell-tags-edit" data-id="${t.id}" onclick="openDataLabelPicker(this,${t.id})">${tagsHtml}<span class="tag-add-hint">+</span></div></td>`; break;
           case 'bucket': rowContent += `<td data-col="bucket"><select data-field="bucket" data-id="${t.id}">${bucketsArr.map(b => `<option value="${b}" ${b === t.bucket ? 'selected' : ''}>${b || '—'}</option>`).join('')}</select></td>`; break;
@@ -680,6 +774,12 @@ function renderDataTable() {
           case 'cost': rowContent += `<td data-col="cost"><input type="text" value="${esc(t.cost || '')}" data-field="cost" data-id="${t.id}" placeholder="..."></td>`; break;
           case 'sprint': rowContent += `<td data-col="sprint"><input type="text" value="${esc(t.sprint || '')}" data-field="sprint" data-id="${t.id}" placeholder="..."></td>`; break;
           case 'category': rowContent += `<td data-col="category"><input type="text" value="${esc(t.category || '')}" data-field="category" data-id="${t.id}" placeholder="..."></td>`; break;
+          case 'calendar': {
+            const calIds = Object.keys(calendars);
+            const curCal = t.calendarId || getDefaultCalendarId();
+            rowContent += `<td data-col="calendar"><select data-field="calendarId" data-id="${t.id}">${calIds.map(id => `<option value="${id}" ${id === curCal ? 'selected' : ''}>${esc(calendars[id].name)}</option>`).join('')}</select></td>`;
+            break;
+          }
         }
       } else {
         const dispStart = t.start ? fmtDate(t.start) : '—';
@@ -706,6 +806,12 @@ function renderDataTable() {
           case 'cost': rowContent += `<td data-col="cost"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.cost || '—')}</span></td>`; break;
           case 'sprint': rowContent += `<td data-col="sprint"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.sprint || '—')}</span></td>`; break;
           case 'category': rowContent += `<td data-col="category"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.category || '—')}</span></td>`; break;
+          case 'calendar': {
+            const calId = t.calendarId || getDefaultCalendarId();
+            const calName = calendars[calId] ? calendars[calId].name : '—';
+            rowContent += `<td data-col="calendar"><span class="ro-text" style="color:var(--grey-txt)">${esc(calName)}</span></td>`;
+            break;
+          }
         }
       }
     });
@@ -797,7 +903,7 @@ function getAllBuckets() {
 }
 
 function sortTaskList(tasks, col, dir) {
-  const keys = [null, 'idx', 'outline', 'name', 'start', 'finish', 'duration', 'isMilestone', 'labels', 'bucket', 'priority', 'percentComplete', 'dependsOn', 'effort', 'notes', 'assigned', 'status', 'cost', 'sprint', 'category'];
+  const keys = [null, 'idx', 'outline', 'name', 'start', 'finish', 'duration', 'isMilestone', 'labels', 'bucket', 'priority', 'percentComplete', 'dependsOn', 'effort', 'notes', 'assigned', 'status', 'cost', 'sprint', 'category', 'calendarId'];
   const key = keys[col];
   if (!key) return tasks;
   tasks.sort((a, b) => {

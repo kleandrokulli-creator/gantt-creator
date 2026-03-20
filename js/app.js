@@ -139,8 +139,32 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
     else if (field === 'cost') { task.cost = el.value; }
     else if (field === 'sprint') { task.sprint = el.value; }
     else if (field === 'category') { task.category = el.value; }
+    else if (field === 'calendarId') { assignCalendarWithChildren(task, el.value); invalidateHolidayCache(); allTasks.forEach(t => recalcDuration(t)); }
+    else if (field === 'duration') {
+      const newDays = parseInt(el.value) || 0;
+      if (newDays > 0 && task.start) {
+        const calId = task.calendarId || getDefaultCalendarId();
+        if (workingDaysMode) {
+          task.finish = addWorkingDays(task.start, newDays, calId);
+        } else {
+          task.finish = new Date(task.start.getTime() + newDays * MS_PER_DAY);
+        }
+        task.duration = newDays + (newDays === 1 ? ' day' : ' days');
+        // Update the finish date cell in the same row
+        const finishEl = el.closest('tr')?.querySelector('[data-field="finish"]');
+        if (finishEl) finishEl.value = dateToInputStr(task.finish);
+        propagateDependencies(task);
+        // Show toast on first edit to explain
+        if (!task._durToastShown) {
+          task._durToastShown = true;
+          showToast(workingDaysMode
+            ? 'Duration = working days (Mon-Fri, excluding holidays)'
+            : 'Duration = calendar days (including weekends)', 'info', 3000);
+        }
+      }
+    }
     // Lightweight fields don't need full tree rebuild
-    const lightFields = ['notes', 'effort', 'assigned', 'cost', 'sprint', 'category', 'bucket', 'priority'];
+    const lightFields = ['notes', 'effort', 'assigned', 'cost', 'sprint', 'category', 'bucket', 'priority', 'calendarId'];
     if (lightFields.includes(field)) {
       reassignColors();
       if (currentTab === 'dati') refreshDataTableDOM();
@@ -151,7 +175,7 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
     rebuildAfterChange();
     if (currentTab === 'roadmap') renderAll();
     // Fields that affect parent aggregation need a full re-render
-    const needsFullRender = ['percentComplete', 'start', 'finish'].includes(field);
+    const needsFullRender = ['percentComplete', 'start', 'finish', 'duration'].includes(field);
     if (currentTab === 'dati') {
       if (needsFullRender) renderDataTable();
       else refreshDataTableDOM();

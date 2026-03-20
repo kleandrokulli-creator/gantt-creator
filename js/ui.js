@@ -236,6 +236,31 @@ function toggleEpTag(el, label) {
   el.classList.toggle('selected');
   const c = LABEL_COLORS[label] || '#64748B';
   el.style.borderColor = el.classList.contains('selected') ? c : 'transparent';
+
+  // Immediately sync labels + colors to the task and re-render the bar
+  const task = allTasks.find(t => t.id === editPanelTaskId);
+  if (task) {
+    const tags = document.querySelectorAll('#ep-tags .ep-tag.selected');
+    task.labels = [...tags].map(t => t.dataset.label);
+    task.colorOverride = '';          // clear any stale override
+    reassignColors();
+
+    // Update the color picker to reflect the new auto-color
+    const epColor = document.getElementById('ep-color');
+    if (epColor) {
+      epColor.value = task.color || DEFAULT_COLOR;
+      _epInitialAutoColor = (task.color || DEFAULT_COLOR).toLowerCase();
+      epColor.classList.toggle('active', false);
+    }
+    // Update the auto-color circle and status text
+    const autoCircle = document.querySelector('.ep-color-auto');
+    if (autoCircle) autoCircle.style.background = task.color || DEFAULT_COLOR;
+    const statusSpan = document.querySelector('.ep-field label span');
+
+    if (currentTab === 'roadmap') renderAll();
+    if (typeof refreshLegendIfOpen === 'function') refreshLegendIfOpen();
+  }
+
   clearTimeout(saveDebounce);
   saveDebounce = setTimeout(() => saveEditPanel(), DEBOUNCE_INPUT_MS);
 }
@@ -650,20 +675,21 @@ function _smartDatePadding(dMin, dMax) {
   const mx = new Date(dMax);
 
   if (currentZoom === 'day') {
-    // Day view: just 3 days of padding on each side
-    mn.setTime(mn.getTime() - 3 * MS_PER_DAY);
+    // Day view: minimal padding — 2 days before, 3 days after
+    mn.setTime(mn.getTime() - 2 * MS_PER_DAY);
     mx.setTime(mx.getTime() + 3 * MS_PER_DAY);
   } else if (currentZoom === 'week') {
-    // Week view: round start to the Monday before the first task, plus 1 week buffer
-    mn.setTime(mn.getTime() - 7 * MS_PER_DAY);
-    const dow = mn.getDay() || 7;
-    mn.setDate(mn.getDate() - dow + 1); // snap to Monday
-    mx.setTime(mx.getTime() + 7 * MS_PER_DAY);
+    // Week view: snap to the Monday of the week the first task starts in
+    const dow = mn.getDay() || 7;           // 1=Mon..7=Sun
+    mn.setDate(mn.getDate() - dow + 1);     // snap to Monday of that week
+    // Add 1 week after the last task
+    const dowEnd = mx.getDay() || 7;
+    mx.setDate(mx.getDate() + (7 - dowEnd) + 7);  // snap to next Sunday + 1 week
   } else {
-    // Month view: round start to the 1st of the month before
-    mn.setTime(mn.getTime() - 7 * MS_PER_DAY);
+    // Month view: start from the 1st of the same month as earliest task
     mn.setDate(1);
-    mx.setTime(mx.getTime() + 7 * MS_PER_DAY);
+    // End at last day of the month after the latest task
+    mx.setTime(mx.getTime() + 14 * MS_PER_DAY);
   }
   return { min: mn, max: mx };
 }

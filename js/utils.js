@@ -55,11 +55,11 @@ function getResponsiveDayPx() {
   const availableWidth = rightPanel.clientWidth - 2;
   const days = Math.max(Math.ceil((maxDate - minDate) / 86400000), 1);
   const fitPx = availableWidth / days;
-  const minPx = { month: 1, week: 4, day: 10 };
+  const minPx = { month: 1, week: 6, day: 14 };
   return {
     month: Math.max(fitPx, minPx.month),
-    week: Math.max(fitPx * 1.5, minPx.week),
-    day: Math.max(fitPx * 3, minPx.day)
+    week: Math.max(fitPx, minPx.week),         // fit to viewport
+    day: Math.max(fitPx, minPx.day)             // fit to viewport
   };
 }
 

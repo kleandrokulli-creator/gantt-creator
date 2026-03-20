@@ -1240,17 +1240,16 @@ function isWeekend(date) { var d = date.getDay(); return d === 0 || d === 6; }
 function _smartDatePadding(dMin, dMax) {
   var mn = new Date(dMin), mx = new Date(dMax);
   if (currentZoom === 'day') {
-    mn.setTime(mn.getTime() - 3 * 86400000);
+    mn.setTime(mn.getTime() - 2 * 86400000);
     mx.setTime(mx.getTime() + 3 * 86400000);
   } else if (currentZoom === 'week') {
-    mn.setTime(mn.getTime() - 7 * 86400000);
     var dow = mn.getDay() || 7;
     mn.setDate(mn.getDate() - dow + 1);
-    mx.setTime(mx.getTime() + 7 * 86400000);
+    var dowEnd = mx.getDay() || 7;
+    mx.setDate(mx.getDate() + (7 - dowEnd) + 7);
   } else {
-    mn.setTime(mn.getTime() - 7 * 86400000);
     mn.setDate(1);
-    mx.setTime(mx.getTime() + 7 * 86400000);
+    mx.setTime(mx.getTime() + 14 * 86400000);
   }
   return { min: mn, max: mx };
 }

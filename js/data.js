@@ -79,10 +79,9 @@ function scheduleSave() {
 function saveProjectToStorage(projectId) {
   if (!projectId || !projects[projectId]) return;
   try {
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-    localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
+    AppStorage.setProjects(projects);
+    AppStorage.setCurrentProjectId(currentProjectId);
   } catch (e) {
-    console.warn('localStorage save failed:', e);
     showToast('Save failed — storage may be full. Export your data to avoid losing work.', 'error');
     updateSaveIndicator('Save failed - storage full');
   }
@@ -118,10 +117,9 @@ function saveCurrentProjectToStorage() {
     workingDaysMode: workingDaysMode
   };
   try {
-    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-    localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
+    AppStorage.setProjects(projects);
+    AppStorage.setCurrentProjectId(currentProjectId);
   } catch (e) {
-    console.warn('localStorage save failed:', e);
     showToast('Save failed — storage may be full. Export your data to avoid losing work.', 'error');
     updateSaveIndicator('Save failed - storage full');
   }
@@ -129,9 +127,8 @@ function saveCurrentProjectToStorage() {
 
 function loadProjectsFromStorage() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_PROJECTS);
-    if (raw) projects = JSON.parse(raw);
-    currentProjectId = localStorage.getItem(STORAGE_KEY_CURRENT);
+    projects = AppStorage.getProjects();
+    currentProjectId = AppStorage.getCurrentProjectId();
   } catch (e) {
     projects = {};
     currentProjectId = null;
@@ -200,7 +197,7 @@ function loadProjectById(id) {
   renderAll();
   if (currentTab === 'dati') renderDataTable();
   renderProjectSelector();
-  localStorage.setItem(STORAGE_KEY_CURRENT, id);
+  AppStorage.setCurrentProjectId(id);
 }
 
 function processLoadedData(data) {
@@ -313,27 +310,22 @@ const _BUILTIN_PRIORITY_COLORS = {
 };
 
 function saveGlobalDefaults() {
-  try {
-    localStorage.setItem(STORAGE_KEY_DEFAULTS, JSON.stringify({
-      labelColors: { ...LABEL_COLORS },
-      bucketColors: { ...BUCKET_COLORS },
-      priorityColors: { ...PRIORITY_COLORS }
-    }));
-  } catch(e) { console.warn('Could not save defaults:', e); }
+  AppStorage.setDefaults({
+    labelColors: { ...LABEL_COLORS },
+    bucketColors: { ...BUCKET_COLORS },
+    priorityColors: { ...PRIORITY_COLORS }
+  });
 }
 
 function loadGlobalDefaults() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_DEFAULTS);
-    if (raw) {
-      const d = JSON.parse(raw);
-      return {
-        labelColors: d.labelColors || { ..._BUILTIN_LABEL_COLORS },
-        bucketColors: d.bucketColors || { ..._BUILTIN_BUCKET_COLORS },
-        priorityColors: d.priorityColors || { ..._BUILTIN_PRIORITY_COLORS }
-      };
-    }
-  } catch(e) {}
+  const d = AppStorage.getDefaults();
+  if (d) {
+    return {
+      labelColors: d.labelColors || { ..._BUILTIN_LABEL_COLORS },
+      bucketColors: d.bucketColors || { ..._BUILTIN_BUCKET_COLORS },
+      priorityColors: d.priorityColors || { ..._BUILTIN_PRIORITY_COLORS }
+    };
+  }
   return {
     labelColors: { ..._BUILTIN_LABEL_COLORS },
     bucketColors: { ..._BUILTIN_BUCKET_COLORS },

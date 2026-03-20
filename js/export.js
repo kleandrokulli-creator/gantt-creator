@@ -848,16 +848,16 @@ async function doHTMLExport(btnEl) {
 
   try {
     // Load source files for self-contained HTML export
-    // Strategy: localStorage cache -> HTTP fetch -> sync XHR -> DOM extraction (CSS only)
-    const SRC_VERSION = 'v21';
+    // Strategy: Storage cache -> HTTP fetch -> sync XHR -> DOM extraction (CSS only)
+    const SRC_VERSION = 'v22';
 
     async function loadSource(filename) {
       const cacheKey = 'planview-src-' + filename;
       const versionKey = 'planview-src-version';
-      // Check localStorage cache (only if version matches)
-      const cachedVersion = localStorage.getItem(versionKey);
+      // Check cache (only if version matches)
+      const cachedVersion = AppStorage.getCacheItem(versionKey);
       if (cachedVersion === SRC_VERSION) {
-        const cached = localStorage.getItem(cacheKey);
+        const cached = AppStorage.getCacheItem(cacheKey);
         if (cached) return cached;
       }
       // Try HTTP fetch
@@ -865,8 +865,8 @@ async function doHTMLExport(btnEl) {
         const r = await fetch('js/' + filename + '?t=' + Date.now());
         if (r.ok) {
           const t = await r.text();
-          localStorage.setItem(cacheKey, t);
-          localStorage.setItem(versionKey, SRC_VERSION);
+          AppStorage.setCacheItem(cacheKey, t);
+          AppStorage.setCacheItem(versionKey, SRC_VERSION);
           return t;
         }
       } catch(e) {}
@@ -876,13 +876,13 @@ async function doHTMLExport(btnEl) {
         xhr.open('GET', 'js/' + filename, false);
         xhr.send();
         if (xhr.responseText) {
-          localStorage.setItem(cacheKey, xhr.responseText);
-          localStorage.setItem(versionKey, SRC_VERSION);
+          AppStorage.setCacheItem(cacheKey, xhr.responseText);
+          AppStorage.setCacheItem(versionKey, SRC_VERSION);
           return xhr.responseText;
         }
       } catch(e) {}
       // Last resort: return stale cache if any
-      const stale = localStorage.getItem(cacheKey);
+      const stale = AppStorage.getCacheItem(cacheKey);
       if (stale) return stale;
       return '';
     }
@@ -900,7 +900,7 @@ async function doHTMLExport(btnEl) {
       if (css) return css;
       // Fallback: try cache or fetch
       const cacheKey = 'planview-src-style.css';
-      const cached = localStorage.getItem(cacheKey);
+      const cached = AppStorage.getCacheItem(cacheKey);
       if (cached) return cached;
       return '';
     }
@@ -945,6 +945,7 @@ async function doHTMLExport(btnEl) {
       showArrows: showArrows,
       currentZoom: currentZoom,
       workingDaysMode: workingDaysMode,
+      calendars: JSON.parse(JSON.stringify(calendars)),
     };
 
     const projectName = projects[currentProjectId]?.name || 'Roadmap';
@@ -1169,6 +1170,7 @@ ${_getMinimalUICode()}
   currentZoom = d.currentZoom || 'month';
   workingDaysMode = d.workingDaysMode || false;
   projectMeta = d.projectMeta || {};
+  if (d.calendars) { calendars = d.calendars; invalidateHolidayCache(); }
 
   // Deserialize tasks
   allTasks = (d.tasks || []).map(s => ({
@@ -1325,19 +1327,7 @@ function getCurrentScope() {
   const t = allTasks.find(x => x.id === last.taskId);
   return t ? (t.filteredChildren || t.children) : taskTree;
 }
-function countWorkingDays(start, end) {
-  if (!start || !end) return 0;
-  var count = 0, d = new Date(start);
-  d.setHours(0,0,0,0);
-  var endTime = new Date(end).setHours(0,0,0,0);
-  while (d.getTime() < endTime) {
-    var day = d.getDay();
-    if (day !== 0 && day !== 6) count++;
-    d.setDate(d.getDate() + 1);
-  }
-  return Math.max(count, 1);
-}
-function isWeekend(date) { var d = date.getDay(); return d === 0 || d === 6; }
+// countWorkingDays and isWeekend are provided by the embedded utils.js (calendar-aware)
 function _smartDatePadding(dMin, dMax) {
   var mn = new Date(dMin), mx = new Date(dMax);
   if (currentZoom === 'day') {
@@ -1438,7 +1428,7 @@ function toggleWorkingDays() {
     if (t.start && t.finish) {
       var days;
       if (workingDaysMode) {
-        days = countWorkingDays(t.start, t.finish);
+        days = countWorkingDays(t.start, t.finish, t.calendarId || getDefaultCalendarId());
         if (t.isMilestone) days = 0;
       } else {
         var raw = Math.round((t.finish - t.start) / 86400000);

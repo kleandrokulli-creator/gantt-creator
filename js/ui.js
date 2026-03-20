@@ -794,8 +794,8 @@ function selectCalendarChip(id) {
   renderSettingsBody();
 }
 
-function addCalendar() {
-  const name = prompt('New calendar name:');
+async function addCalendar() {
+  const name = await showPrompt('New calendar name:', { title: 'Add Calendar', placeholder: 'e.g. Italy, UK, Germany...' });
   if (!name || !name.trim()) return;
   const id = 'cal_' + Date.now();
   const usedColors = Object.values(calendars).map(c => c.color);
@@ -815,9 +815,9 @@ function renameCalendar(id, newName) {
   scheduleSave();
 }
 
-function deleteCalendar(id) {
+async function deleteCalendar(id) {
   if (Object.keys(calendars).length <= 1) return;
-  if (!confirm('Delete calendar "' + calendars[id].name + '"?')) return;
+  if (!await showConfirm('Delete calendar "' + calendars[id].name + '"?', { title: 'Delete Calendar', danger: true, okLabel: 'Delete' })) return;
   // Move tasks to default
   const defId = getDefaultCalendarId();
   allTasks.forEach(t => { if (t.calendarId === id) t.calendarId = defId; });

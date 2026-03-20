@@ -382,9 +382,13 @@ async function deleteCurrentProject() {
   if (!await showConfirm('Delete project "' + (projects[currentProjectId]?.name || '') + '"?', { title: 'Delete Project', danger: true, okLabel: 'Delete' })) return;
   delete projects[currentProjectId];
   const remaining = Object.keys(projects);
-  currentProjectId = remaining[0];
-  saveCurrentProjectToStorage();
-  loadProjectById(currentProjectId);
+  // Save the projects list BEFORE changing currentProjectId to avoid
+  // saveCurrentProjectToStorage overwriting the remaining project's data
+  try {
+    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+  } catch (e) { console.warn('localStorage save failed:', e); }
+  // Now load the remaining project (this sets currentProjectId and restores its data)
+  loadProjectById(remaining[0]);
 }
 
 

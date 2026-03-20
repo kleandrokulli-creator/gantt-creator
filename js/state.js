@@ -85,6 +85,7 @@ let sortColumns = [];
 // Legacy single-sort aliases (used throughout the codebase)
 let sortCol = null, sortDir = null;
 let saveDebounce = null;
+let pendingInlineSave = null;
 let isDataEditMode = false;
 let autoSaveDebounce = null;
 let currentSettingsTab = 'labels';

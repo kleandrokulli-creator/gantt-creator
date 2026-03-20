@@ -732,15 +732,17 @@ function renderCalendarSettingsHTML() {
       if (entry.type === 'holiday') {
         html += `<div class="cal-entry">
           <span class="cal-entry-type">Holiday</span>
-          <span class="cal-entry-dates">${entry.date}</span>
-          <span class="cal-entry-label">${esc(entry.label)}</span>
+          <input type="date" value="${entry.date}" onchange="updateCalendarEntry('${_selectedCalId}',${idx},'date',this.value)" style="font-size:.8rem">
+          <input type="text" value="${esc(entry.label)}" onchange="updateCalendarEntry('${_selectedCalId}',${idx},'label',this.value)" placeholder="Label" style="flex:1;font-size:.8rem">
           <button class="del-btn" onclick="removeCalendarEntry('${_selectedCalId}',${idx})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>`;
       } else {
         html += `<div class="cal-entry">
           <span class="cal-entry-type">Closure</span>
-          <span class="cal-entry-dates">${entry.startDate} to ${entry.endDate}</span>
-          <span class="cal-entry-label">${esc(entry.label)}</span>
+          <input type="date" value="${entry.startDate}" onchange="updateCalendarEntry('${_selectedCalId}',${idx},'startDate',this.value)" style="font-size:.8rem">
+          <span style="color:var(--grey-txt);font-size:.8rem">to</span>
+          <input type="date" value="${entry.endDate}" onchange="updateCalendarEntry('${_selectedCalId}',${idx},'endDate',this.value)" style="font-size:.8rem">
+          <input type="text" value="${esc(entry.label)}" onchange="updateCalendarEntry('${_selectedCalId}',${idx},'label',this.value)" placeholder="Label" style="flex:1;font-size:.8rem">
           <button class="del-btn" onclick="removeCalendarEntry('${_selectedCalId}',${idx})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>`;
       }
@@ -859,6 +861,22 @@ function submitCalendarClosure(calId) {
   invalidateHolidayCache();
   allTasks.forEach(t => recalcDuration(t));
   renderSettingsBody();
+  renderAll();
+  scheduleSave();
+}
+
+function updateCalendarEntry(calId, idx, field, value) {
+  const entry = calendars[calId]?.entries?.[idx];
+  if (!entry) return;
+  entry[field] = value;
+  // Validate closure dates
+  if (entry.type === 'closure' && entry.startDate && entry.endDate && entry.startDate > entry.endDate) {
+    if (field === 'startDate') entry.endDate = value;
+    else entry.startDate = value;
+    renderSettingsBody();
+  }
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
   renderAll();
   scheduleSave();
 }

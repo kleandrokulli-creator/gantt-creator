@@ -429,6 +429,15 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .template-chips{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:.4rem}
 .template-chip{background:var(--card);color:var(--body-fg);border:1px solid var(--border);border-radius:8px;padding:.4rem .8rem;font-family:inherit;font-size:.8rem;cursor:pointer;transition:all .15s}
 .template-chip:hover{border-color:var(--blue);color:var(--blue)}
+.template-chip-more{background:transparent;border-style:dashed;color:var(--grey-txt)}
+.template-chip-more:hover{background:rgba(59,130,246,.04)}
+.template-modal-list{display:flex;flex-direction:column;gap:4px}
+.template-modal-item{display:flex;align-items:center;gap:.5rem;padding:.6rem .8rem;border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s}
+.template-modal-item:hover{border-color:var(--blue);background:rgba(59,130,246,.04)}
+.template-modal-name{font-size:.85rem;font-weight:500;color:var(--body-fg)}
+.template-modal-meta{font-size:.72rem;color:var(--grey-txt)}
+.template-modal-delete{background:none;border:none;cursor:pointer;color:var(--grey-txt);padding:4px;border-radius:4px;transition:color .15s}
+.template-modal-delete:hover{color:var(--red)}
 
 
 /* ===== EYE VISIBILITY BUTTON ===== */

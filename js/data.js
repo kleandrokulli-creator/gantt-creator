@@ -240,6 +240,13 @@ async function createNewProject(name) {
   const id = generateId();
   const pName = name || await showPrompt('Enter a name for the new project:', { title: 'New Project', defaultValue: DEFAULT_PROJECT_NAME });
   if (pName === null) return;
+  const trimmed = (pName || DEFAULT_PROJECT_NAME).trim();
+  // Duplicate name check
+  const isDuplicate = Object.values(projects).some(p => p.name && p.name.toLowerCase() === trimmed.toLowerCase());
+  if (isDuplicate) {
+    showToast('A project with this name already exists. Please choose a different name.', 'warn');
+    return;
+  }
 
   // Load global defaults for labels/buckets/priority (if saved)
   const defaults = loadGlobalDefaults();
@@ -251,7 +258,7 @@ async function createNewProject(name) {
   Object.assign(PRIORITY_COLORS, defaults.priorityColors);
 
   projects[id] = {
-    name: pName || DEFAULT_PROJECT_NAME, meta: {}, tasks: [],
+    name: trimmed, meta: {}, tasks: [],
     labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
     priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS }
   };
@@ -333,7 +340,14 @@ async function renameCurrentProject() {
   if (!currentProjectId || !projects[currentProjectId]) return;
   const newName = await showPrompt('Rename project:', { title: 'Rename Project', defaultValue: projects[currentProjectId].name });
   if (!newName || !newName.trim()) return;
-  projects[currentProjectId].name = newName.trim();
+  const trimmed = newName.trim();
+  // Duplicate name check (exclude current project)
+  const isDuplicate = Object.entries(projects).some(([id, p]) => id !== currentProjectId && p.name && p.name.toLowerCase() === trimmed.toLowerCase());
+  if (isDuplicate) {
+    showToast('A project with this name already exists. Please choose a different name.', 'warn');
+    return;
+  }
+  projects[currentProjectId].name = trimmed;
   renderProjectSelector();
   saveCurrentProjectToStorage();
 }
@@ -569,7 +583,9 @@ function parseCSV(text, delimiter) {
     const name = cells[cName] || '';
     if (!name) continue;
     id++;
-    const outline = cOutline >= 0 && cells[cOutline] ? cells[cOutline] : String(id);
+    let outline = cOutline >= 0 && cells[cOutline] ? cells[cOutline].trim() : String(id);
+    // Validate outline format: must be dot-separated numbers
+    if (!/^\d+(\.\d+)*$/.test(outline)) outline = String(id);
     const depth = outline.split('.').length;
     const startStr = cStart >= 0 ? cells[cStart] : '';
     const finishStr = cFinish >= 0 ? cells[cFinish] : '';
@@ -580,6 +596,7 @@ function parseCSV(text, delimiter) {
     const labels = cLabels >= 0 && cells[cLabels] ? cells[cLabels].split(';').map(s => s.trim()).filter(Boolean) : [];
     let pct = cPct >= 0 ? parseFloat(cells[cPct]) || 0 : 0;
     if (pct > 1) pct /= 100;
+    pct = Math.max(0, Math.min(1, pct));
 
     const task = {
       id, taskNumber: id, outline, depth, name, start, finish,
@@ -595,6 +612,14 @@ function parseCSV(text, delimiter) {
       cost: '', sprint: '', category: ''
     };
     allTasks.push(task);
+  }
+
+  // Warn about duplicate outlines
+  const outlineCounts = {};
+  allTasks.forEach(t => { outlineCounts[t.outline] = (outlineCounts[t.outline] || 0) + 1; });
+  const dupes = Object.entries(outlineCounts).filter(([_, c]) => c > 1).map(([o]) => o);
+  if (dupes.length > 0) {
+    showToast('Warning: duplicate outline numbers found (' + dupes.slice(0, 3).join(', ') + '). Some tasks may not display correctly.', 'warn', 6000);
   }
 
   buildTree();
@@ -664,12 +689,18 @@ function parseExcel(data) {
     if (!row || !row[cOutline]) continue;
     const outline = String(row[cOutline]).trim();
     if (!outline) continue;
+    // Validate outline format: must be dot-separated numbers (e.g., "1", "1.1", "1.2.3")
+    if (!/^\d+(\.\d+)*$/.test(outline)) {
+      console.warn('Skipping row with invalid outline format: ' + outline);
+      continue;
+    }
     const depth = outline.split('.').length;
     const startD = excelDateToJS(row[cStart]);
     const finishD = excelDateToJS(row[cFinish]);
     let pct = row[cComplete];
     if (typeof pct === 'number') { pct = pct > 1 ? pct / 100 : pct; }
     else { pct = parseFloat(pct) || 0; if (pct > 1) pct /= 100; }
+    pct = Math.max(0, Math.min(1, pct));
     const durStr = String(row[cDuration] || '0 days').trim();
     const isMilestone = durStr === '0 days' || durStr === '0';
     const labels = String(row[cLabels] || '').split(';').map(s => s.trim()).filter(Boolean);
@@ -692,6 +723,14 @@ function parseExcel(data) {
       category: cCategory >= 0 ? String(row[cCategory] || '').trim() : ''
     };
     allTasks.push(task);
+  }
+
+  // Warn about duplicate outlines
+  const outlineCounts = {};
+  allTasks.forEach(t => { outlineCounts[t.outline] = (outlineCounts[t.outline] || 0) + 1; });
+  const dupes = Object.entries(outlineCounts).filter(([_, c]) => c > 1).map(([o]) => o);
+  if (dupes.length > 0) {
+    showToast('Warning: duplicate outline numbers found (' + dupes.slice(0, 3).join(', ') + '). Some tasks may not display correctly.', 'warn', 6000);
   }
 
   buildTree();

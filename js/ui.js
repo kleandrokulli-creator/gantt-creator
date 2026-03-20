@@ -335,6 +335,8 @@ function saveEditPanel() {
   const fv = document.getElementById('ep-finish').value;
   let newStart = sv ? new Date(sv + 'T00:00:00') : null;
   let newFinish = fv ? new Date(fv + 'T00:00:00') : null;
+  if (newStart && isNaN(newStart.getTime())) newStart = null;
+  if (newFinish && isNaN(newFinish.getTime())) newFinish = null;
   if (newStart && newFinish && newStart > newFinish) {
     const startEl = document.getElementById('ep-start');
     const finishEl = document.getElementById('ep-finish');
@@ -354,7 +356,8 @@ function saveEditPanel() {
     propagateDependencies(task);
     document.getElementById('ep-duration').value = task.duration;
   }
-  const manualPct = parseInt(document.getElementById('ep-pct').value) / 100;
+  const rawPct = parseInt(document.getElementById('ep-pct').value) || 0;
+  const manualPct = Math.max(0, Math.min(100, rawPct)) / 100;
   task.percentComplete = manualPct;
   // Only mark leaf tasks as manual progress; parent tasks should always auto-aggregate
   const isLeaf = !task.children || task.children.length === 0;
@@ -368,6 +371,16 @@ function saveEditPanel() {
     showToast('Circular dependency detected. This would create a cycle.', 'error');
     document.getElementById('ep-depends').value = task.dependsOn;
     return;
+  }
+  // Validate dependency references exist
+  if (newDepsVal) {
+    const deps = parseDependency(newDepsVal);
+    const taskByNum = new Map();
+    allTasks.forEach(t => taskByNum.set(t.taskNumber, t));
+    const invalid = deps.filter(d => !taskByNum.has(d.taskNum));
+    if (invalid.length > 0) {
+      showToast('Task #' + invalid[0].taskNum + ' not found. Check dependency references.', 'warn');
+    }
   }
   task.dependsOn = newDepsVal;
   task.effort = document.getElementById('ep-effort').value;
@@ -1190,6 +1203,45 @@ const PROJECT_TEMPLATES = {
         { outline: '3.3', name: 'Teardown & follow-up', days: 1, dep: '9' }
       ]}
     ]
+  },
+  sap: {
+    name: 'SAP Implementation',
+    tasks: [
+      { outline: '1', name: 'Discover', days: 15, children: [
+        { outline: '1.1', name: 'Business process analysis', days: 5 },
+        { outline: '1.2', name: 'System landscape review', days: 5, dep: '1' },
+        { outline: '1.3', name: 'Gap analysis & requirements', days: 5, dep: '2' }
+      ]},
+      { outline: '2', name: 'Prepare', days: 15, dep: '1', children: [
+        { outline: '2.1', name: 'Project team onboarding', days: 3 },
+        { outline: '2.2', name: 'Environment setup & provisioning', days: 5, dep: '5' },
+        { outline: '2.3', name: 'Data migration strategy', days: 5, dep: '5' },
+        { outline: '2.4', name: 'Cutover plan', days: 2, dep: '6,7' }
+      ]},
+      { outline: '3', name: 'Explore', days: 20, dep: '2', children: [
+        { outline: '3.1', name: 'Fit-to-standard workshops', days: 10 },
+        { outline: '3.2', name: 'Configuration documentation', days: 5, dep: '10' },
+        { outline: '3.3', name: 'Custom development specs', days: 5, dep: '11' }
+      ]},
+      { outline: '4', name: 'Realize', days: 30, dep: '3', children: [
+        { outline: '4.1', name: 'System configuration', days: 10 },
+        { outline: '4.2', name: 'Custom development (ABAP/Fiori)', days: 15 },
+        { outline: '4.3', name: 'Data migration development', days: 10, dep: '14' },
+        { outline: '4.4', name: 'Integration testing', days: 5, dep: '15,16' },
+        { outline: '4.5', name: 'User acceptance testing', days: 5, dep: '17' }
+      ]},
+      { outline: '5', name: 'Deploy', days: 10, dep: '4', children: [
+        { outline: '5.1', name: 'End-user training', days: 5 },
+        { outline: '5.2', name: 'Data migration execution', days: 3, dep: '20' },
+        { outline: '5.3', name: 'Go-live', days: 0, dep: '21' },
+        { outline: '5.4', name: 'Hypercare support', days: 5, dep: '22' }
+      ]},
+      { outline: '6', name: 'Run', days: 10, dep: '5', children: [
+        { outline: '6.1', name: 'Operational handover', days: 3 },
+        { outline: '6.2', name: 'Performance monitoring', days: 5, dep: '25' },
+        { outline: '6.3', name: 'Project closure', days: 0, dep: '26' }
+      ]}
+    ]
   }
 };
 
@@ -1229,6 +1281,144 @@ function loadTemplate(templateKey) {
   renderAll();
   if (currentTab === 'dati') renderDataTable();
   scheduleSave();
+}
+
+/* ---------- CUSTOM TEMPLATES ---------- */
+
+function getCustomTemplates() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TEMPLATES);
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+
+function saveCustomTemplates(templates) {
+  try {
+    localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(templates));
+  } catch(e) { showToast('Could not save templates - storage may be full.', 'warn'); }
+}
+
+async function saveAsTemplate() {
+  if (allTasks.length === 0) {
+    showToast('No tasks to save as template.', 'warn');
+    return;
+  }
+  const defaultName = projects[currentProjectId]?.name || 'My Template';
+  const name = await showPrompt('Enter a name for this template:', { title: 'Save as Template', defaultValue: defaultName });
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  const templates = getCustomTemplates();
+  // Check for duplicate name
+  if (templates[trimmed]) {
+    const overwrite = await showConfirm('A template named "' + trimmed + '" already exists. Overwrite it?', { title: 'Template Exists', okLabel: 'Overwrite', danger: true });
+    if (!overwrite) return;
+  }
+  // Serialize current tasks as template
+  templates[trimmed] = {
+    name: trimmed,
+    tasks: serializeTasks(),
+    createdAt: new Date().toISOString()
+  };
+  saveCustomTemplates(templates);
+  showToast('Template "' + trimmed + '" saved successfully.', 'success');
+}
+
+function loadCustomTemplate(name) {
+  const templates = getCustomTemplates();
+  const tmpl = templates[name];
+  if (!tmpl || !tmpl.tasks) return;
+  snapshotUndo();
+  allTasks = deserializeTasks(tmpl.tasks);
+  // Re-assign IDs to avoid conflicts
+  allTasks.forEach((t, i) => { t.id = i + 1; t.taskNumber = i + 1; });
+  buildTree();
+  aggregateParentProgress();
+  reassignColors();
+  allTasks.forEach(t => { if (t.dependsOn) propagateDependencies(t); });
+  rebuildAfterChange();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+async function deleteCustomTemplate(name) {
+  const ok = await showConfirm('Delete template "' + name + '"?', { title: 'Delete Template', danger: true, okLabel: 'Delete' });
+  if (!ok) return;
+  const templates = getCustomTemplates();
+  delete templates[name];
+  saveCustomTemplates(templates);
+  showToast('Template deleted.', 'success');
+  // Refresh the modal if open
+  const modal = document.getElementById('template-modal');
+  if (modal) showTemplateModal();
+}
+
+function showTemplateModal() {
+  // Remove existing modal if any
+  const existing = document.getElementById('template-modal-overlay');
+  if (existing) existing.remove();
+
+  const builtIn = Object.entries(PROJECT_TEMPLATES);
+  const custom = Object.entries(getCustomTemplates());
+
+  let html = '<div id="template-modal-overlay" class="dialog-overlay show" onclick="if(event.target===this)this.remove()">';
+  html += '<div class="dialog-box" style="max-width:520px;width:90%">';
+  html += '<div class="dialog-title" style="display:flex;align-items:center;justify-content:space-between">';
+  html += '<span>Choose a Template</span>';
+  html += '<button onclick="this.closest(\'#template-modal-overlay\').remove()" style="background:none;border:none;cursor:pointer;color:var(--grey-txt);font-size:1.2rem">&times;</button>';
+  html += '</div>';
+
+  // Built-in templates
+  html += '<div style="margin:.8rem 0 .4rem;font-size:.75rem;font-weight:600;text-transform:uppercase;color:var(--grey-txt);letter-spacing:.5px">Built-in</div>';
+  html += '<div class="template-modal-list">';
+  for (const [key, tmpl] of builtIn) {
+    const taskCount = _countTemplateTasks(tmpl.tasks);
+    html += '<div class="template-modal-item" onclick="loadTemplate(\'' + key + '\');document.getElementById(\'template-modal-overlay\').remove()">';
+    html += '<div class="template-modal-name">' + _escDialog(tmpl.name) + '</div>';
+    html += '<div class="template-modal-meta">' + taskCount + ' tasks</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Custom templates
+  html += '<div style="margin:1rem 0 .4rem;font-size:.75rem;font-weight:600;text-transform:uppercase;color:var(--grey-txt);letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between">Custom';
+  html += '<button onclick="saveAsTemplate();document.getElementById(\'template-modal-overlay\').remove()" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:.75rem;cursor:pointer;font-family:inherit">+ Save Current</button>';
+  html += '</div>';
+  html += '<div class="template-modal-list">';
+  if (custom.length === 0) {
+    html += '<div style="padding:.8rem;color:var(--grey-txt);font-size:.82rem;text-align:center">No custom templates yet. Save your current project as a template to reuse it later.</div>';
+  }
+  for (const [name, tmpl] of custom) {
+    const taskCount = tmpl.tasks ? tmpl.tasks.length : 0;
+    const dateStr = tmpl.createdAt ? new Date(tmpl.createdAt).toLocaleDateString() : '';
+    html += '<div class="template-modal-item">';
+    html += '<div style="flex:1;cursor:pointer" onclick="loadCustomTemplate(\'' + _escDialog(name).replace(/'/g, "\\'") + '\');document.getElementById(\'template-modal-overlay\').remove()">';
+    html += '<div class="template-modal-name">' + _escDialog(name) + '</div>';
+    html += '<div class="template-modal-meta">' + taskCount + ' tasks' + (dateStr ? ' -- ' + dateStr : '') + '</div>';
+    html += '</div>';
+    html += '<button class="template-modal-delete" onclick="event.stopPropagation();deleteCustomTemplate(\'' + _escDialog(name).replace(/'/g, "\\'") + '\')" title="Delete template">';
+    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 002 2h10a2 2 0 002-2V6"/></svg>';
+    html += '</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Dialog buttons
+  html += '<div class="dialog-buttons" style="margin-top:1rem">';
+  html += '<button class="dialog-btn dialog-btn-cancel" onclick="this.closest(\'#template-modal-overlay\').remove()">Cancel</button>';
+  html += '</div>';
+  html += '</div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function _countTemplateTasks(tasks) {
+  let count = 0;
+  for (const t of tasks) {
+    count++;
+    if (t.children) count += _countTemplateTasks(t.children);
+  }
+  return count;
 }
 
 /**
@@ -2480,12 +2670,14 @@ function initKeyboardNav() {
           task.name = trimmed || DEFAULT_TASK_NAME;
         } else if (field === 'start') {
           const newStart = val ? new Date(val + 'T00:00:00') : null;
+          if (newStart && isNaN(newStart.getTime())) { td.innerHTML = origValue; td.classList.remove('cell-editing'); return; }
           if (newStart && task.finish && newStart > task.finish) task.finish = new Date(newStart);
           task.start = newStart;
           recalcDuration(task);
           propagateDependencies(task);
         } else if (field === 'finish') {
           const newFinish = val ? new Date(val + 'T00:00:00') : null;
+          if (newFinish && isNaN(newFinish.getTime())) { td.innerHTML = origValue; td.classList.remove('cell-editing'); return; }
           if (newFinish && task.start && newFinish < task.start) task.start = new Date(newFinish);
           task.finish = newFinish;
           recalcDuration(task);
@@ -2502,6 +2694,16 @@ function initKeyboardNav() {
             td.innerHTML = origValue;
             td.classList.remove('cell-editing');
             return;
+          }
+          // Validate dependency references exist
+          if (val) {
+            const deps = parseDependency(val);
+            const taskByNum = new Map();
+            allTasks.forEach(t => taskByNum.set(t.taskNumber, t));
+            const invalid = deps.filter(d => !taskByNum.has(d.taskNum));
+            if (invalid.length > 0) {
+              showToast('Task #' + invalid[0].taskNum + ' not found. Check dependency references.', 'warn');
+            }
           }
           task.dependsOn = val;
         } else if (field === 'bucket') { task.bucket = val; }

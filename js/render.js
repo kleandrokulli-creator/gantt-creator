@@ -180,6 +180,8 @@ function renderLeftPanel() {
           <button class="template-chip" onclick="loadTemplate('software')">Software Development</button>
           <button class="template-chip" onclick="loadTemplate('marketing')">Marketing Campaign</button>
           <button class="template-chip" onclick="loadTemplate('event')">Event Planning</button>
+          <button class="template-chip" onclick="loadTemplate('sap')">SAP Implementation</button>
+          <button class="template-chip template-chip-more" onclick="showTemplateModal()">More templates...</button>
         </div>
       </div>
     </div>`;

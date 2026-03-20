@@ -945,6 +945,7 @@ async function doHTMLExport(btnEl) {
       showArrows: showArrows,
       currentZoom: currentZoom,
       workingDaysMode: workingDaysMode,
+      splitBarsMode: splitBarsMode,
       calendars: JSON.parse(JSON.stringify(calendars)),
     };
 
@@ -1169,6 +1170,7 @@ ${_getMinimalUICode()}
   showArrows = d.showArrows !== false;
   currentZoom = d.currentZoom || 'month';
   workingDaysMode = d.workingDaysMode || false;
+  splitBarsMode = d.splitBarsMode !== undefined ? d.splitBarsMode : true;
   projectMeta = d.projectMeta || {};
   if (d.calendars) { calendars = d.calendars; invalidateHolidayCache(); }
 
@@ -1192,6 +1194,8 @@ ${_getMinimalUICode()}
   if (msBtn) msBtn.classList.toggle('active', milestoneInline);
   const wdBtn = document.getElementById('working-days-btn');
   if (wdBtn) wdBtn.classList.toggle('active', workingDaysMode);
+  const sbBtn = document.getElementById('split-bars-btn');
+  if (sbBtn) sbBtn.classList.toggle('active', splitBarsMode);
 
   renderAll();
 

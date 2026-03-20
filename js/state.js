@@ -72,6 +72,7 @@ let milestoneInline = true;
 let showArrows = true;
 let currentZoom = 'month';
 let workingDaysMode = false;   // true = working days (Mon-Fri), skip weekends & holidays
+let splitBarsMode = true;      // true = bars split around holidays, false = continuous bars
 let minDate, maxDate, totalDays, canvasWidth;
 let filteredTree = [];
 let selectedRows = new Set();

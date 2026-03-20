@@ -450,7 +450,10 @@ function renderTimelineBars(dpx) {
         });
         bg = `repeating-linear-gradient(135deg, ${stops.join(', ')})`;
       }
-      html += `<div class="tl-holiday" style="left:${x}px;width:${colW}px;background:${bg}" title="${esc(tooltip)}"></div>`;
+      // Encode holiday info as data attributes for custom tooltip
+      const tooltipData = encodeURIComponent(JSON.stringify(infos.map(i => ({ cal: i.calendarName, label: i.label, color: i.color }))));
+      const dateLabel = hDate.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+      html += `<div class="tl-holiday" style="left:${x}px;width:${colW}px;background:${bg};pointer-events:auto;cursor:default" data-holiday-info="${tooltipData}" data-holiday-date="${esc(dateLabel)}" onmouseenter="showHolidayTooltip(event)" onmouseleave="hideHolidayTooltip()" onmousemove="moveHolidayTooltip(event)"></div>`;
     }
 
     // Shade bridged weekends (Sat/Sun between holidays, not already in a closure)
@@ -530,7 +533,7 @@ function renderTimelineBars(dpx) {
       const cls = r.hasChildren ? 'summary' : '';
       // Use the task's own calendar for bar splitting (not the global scoped set)
       const taskCalId = task.calendarId || getDefaultCalendarId();
-      const shouldSplit = workingDaysMode && task.finish && taskCalId;
+      const shouldSplit = splitBarsMode && workingDaysMode && task.finish && taskCalId;
       const holidayGaps = shouldSplit ? findHolidayGaps(task.start, task.finish, taskCalId) : [];
 
       if (holidayGaps.length > 0) {

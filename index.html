@@ -6,7 +6,7 @@
 <title>PlanView - Gantt Roadmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=36">
+<link rel="stylesheet" href="css/style.css?v=37">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
@@ -71,6 +71,10 @@
       <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" title="Toggle working days (Mon-Fri) / calendar days">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
         <span>Mon-Fri</span>
+      </button>
+      <button onclick="toggleSplitBars()" id="split-bars-btn" class="btn-icon btn-sm active" title="Toggle bar splitting around holidays">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h6M15 12h6"/><rect x="9" y="8" width="6" height="8" rx="1" stroke-dasharray="2 2"/></svg>
+        <span>Split</span>
       </button>
     </div>
 
@@ -286,19 +290,19 @@
 </div>
 
 <!-- SCRIPTS (order matters: state → utils → dialog → data → render → ui → app) -->
-<script src="js/state.js?v=36"></script>
-<script src="js/storage.js?v=36"></script>
-<script src="js/utils.js?v=36"></script>
-<script src="js/dialog.js?v=36"></script>
-<script src="js/data.js?v=36"></script>
-<script src="js/render.js?v=36"></script>
-<script src="js/ui.js?v=36"></script>
-<script src="js/ui-editpanel.js?v=36"></script>
-<script src="js/ui-settings.js?v=36"></script>
-<script src="js/ui-tasks.js?v=36"></script>
-<script src="js/ui-datatable.js?v=36"></script>
-<script src="js/export.js?v=36"></script>
-<script src="js/app.js?v=36"></script>
+<script src="js/state.js?v=37"></script>
+<script src="js/storage.js?v=37"></script>
+<script src="js/utils.js?v=37"></script>
+<script src="js/dialog.js?v=37"></script>
+<script src="js/data.js?v=37"></script>
+<script src="js/render.js?v=37"></script>
+<script src="js/ui.js?v=37"></script>
+<script src="js/ui-editpanel.js?v=37"></script>
+<script src="js/ui-settings.js?v=37"></script>
+<script src="js/ui-tasks.js?v=37"></script>
+<script src="js/ui-datatable.js?v=37"></script>
+<script src="js/export.js?v=37"></script>
+<script src="js/app.js?v=37"></script>
 <script>
 // Pre-cache JS sources in localStorage for HTML export
 (function() {

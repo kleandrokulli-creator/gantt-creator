@@ -115,7 +115,8 @@ function saveCurrentProjectToStorage() {
     columnWidths: { ...columnWidths },
     tableScrollMode: tableScrollMode,
     calendars: JSON.parse(JSON.stringify(calendars)),
-    workingDaysMode: workingDaysMode
+    workingDaysMode: workingDaysMode,
+    splitBarsMode: splitBarsMode
   };
   try {
     AppStorage.setProjects(projects);
@@ -190,8 +191,11 @@ function loadProjectById(id) {
   columnWidths = proj.columnWidths || {};
   tableScrollMode = proj.tableScrollMode || false;
   workingDaysMode = proj.workingDaysMode || false;
+  splitBarsMode = proj.splitBarsMode !== undefined ? proj.splitBarsMode : true;
   const wdBtn = document.getElementById('working-days-btn');
   if (wdBtn) wdBtn.classList.toggle('active', workingDaysMode);
+  const sbBtn = document.getElementById('split-bars-btn');
+  if (sbBtn) sbBtn.classList.toggle('active', splitBarsMode);
   getState().allExpanded = false;
   undoStack = [];
   updateShowAllBtn();
@@ -283,7 +287,8 @@ async function createNewProject(name) {
     labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
     priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS },
     calendars: JSON.parse(JSON.stringify(calendars)),
-    workingDaysMode: workingDaysMode
+    workingDaysMode: workingDaysMode,
+    splitBarsMode: splitBarsMode
   };
   currentProjectId = id;
   projectMeta = {};

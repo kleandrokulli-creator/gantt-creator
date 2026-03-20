@@ -751,6 +751,65 @@ function hideTooltip() {
   tooltipTimeout = setTimeout(() => DOM.tooltip.classList.remove('visible'), 100);
 }
 
+/* ---------- HOLIDAY TOOLTIP ---------- */
+
+let holidayTooltipEl = null;
+
+function getHolidayTooltipEl() {
+  if (!holidayTooltipEl) {
+    holidayTooltipEl = document.createElement('div');
+    holidayTooltipEl.className = 'holiday-tooltip';
+    document.body.appendChild(holidayTooltipEl);
+  }
+  return holidayTooltipEl;
+}
+
+function showHolidayTooltip(e) {
+  const el = e.currentTarget;
+  const infoStr = el.getAttribute('data-holiday-info');
+  const dateLabel = el.getAttribute('data-holiday-date');
+  if (!infoStr) return;
+  const infos = JSON.parse(decodeURIComponent(infoStr));
+  const tip = getHolidayTooltipEl();
+  let html = `<div style="font-weight:600;font-size:.8rem;margin-bottom:4px;color:#334155">${dateLabel}</div>`;
+  infos.forEach(info => {
+    html += `<div style="display:flex;align-items:center;gap:6px;margin-top:3px">`;
+    html += `<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${info.color};flex-shrink:0"></span>`;
+    html += `<span style="font-size:.75rem;color:#64748B">${esc(info.cal)}</span>`;
+    html += `<span style="font-size:.78rem;font-weight:500;color:#1E293B">${esc(info.label)}</span>`;
+    html += `</div>`;
+  });
+  tip.innerHTML = html;
+  tip.classList.add('visible');
+  moveHolidayTooltip(e);
+}
+
+function moveHolidayTooltip(e) {
+  const tip = getHolidayTooltipEl();
+  let x = e.clientX + 12, y = e.clientY + 12;
+  const rect = tip.getBoundingClientRect();
+  if (x + 220 > window.innerWidth) x = e.clientX - 220;
+  if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - 8;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+
+function hideHolidayTooltip() {
+  const tip = getHolidayTooltipEl();
+  tip.classList.remove('visible');
+}
+
+/* ---------- TOGGLE SPLIT BARS ---------- */
+
+function toggleSplitBars() {
+  splitBarsMode = !splitBarsMode;
+  const btn = document.getElementById('split-bars-btn');
+  if (btn) btn.classList.toggle('active', splitBarsMode);
+  saveProject();
+  renderAll();
+  showToast(splitBarsMode ? 'Bars split around holidays' : 'Continuous bars (no split)', 'info', 2000);
+}
+
 
 /* ---------- NAVIGATION ---------- */
 

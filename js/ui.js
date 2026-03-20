@@ -805,7 +805,7 @@ function toggleSplitBars() {
   splitBarsMode = !splitBarsMode;
   const btn = document.getElementById('split-bars-btn');
   if (btn) btn.classList.toggle('active', splitBarsMode);
-  saveProject();
+  saveCurrentProjectToStorage();
   renderAll();
   showToast(splitBarsMode ? 'Bars split around holidays' : 'Continuous bars (no split)', 'info', 2000);
 }

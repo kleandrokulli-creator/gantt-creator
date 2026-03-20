@@ -1016,3 +1016,8 @@ input:focus-visible, textarea:focus-visible {
   outline-offset: -2px;
   background: rgba(59,130,246,.06) !important;
 }
+
+/* Site footer */
+.site-footer{position:fixed;bottom:0;left:0;right:0;height:24px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:.7rem;color:var(--grey-txt);background:var(--card-bg);border-top:1px solid var(--border);z-index:5;pointer-events:auto}
+.site-footer a{color:var(--grey-txt);display:inline-flex;align-items:center;transition:color .15s}
+.site-footer a:hover{color:#0A66C2}

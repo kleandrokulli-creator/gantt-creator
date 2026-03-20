@@ -585,7 +585,12 @@ function recalcDuration(task) {
   snapTaskToWorkingDays(task);
   if (task.start && task.finish) {
     let days;
-    if (workingDaysMode) {
+    const isParent = task.children && task.children.length > 0;
+    if (isParent) {
+      // Parent tasks: duration = calendar days span (they are containers, not work items)
+      const diffMs = task.finish.getTime() - task.start.getTime();
+      days = Math.max(Math.round(diffMs / MS_PER_DAY), 1);
+    } else if (workingDaysMode) {
       const calId = task.calendarId || getDefaultCalendarId();
       days = countWorkingDays(task.start, task.finish, calId);
       if (task.isMilestone) days = 0;

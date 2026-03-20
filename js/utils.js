@@ -99,12 +99,21 @@ function starSVG(size, color) {
  * Create a new task object with sensible defaults. Pass overrides for specific fields.
  */
 function createTaskObject(overrides) {
-  const now = new Date(); now.setHours(0, 0, 0, 0);
+  let now = new Date(); now.setHours(0, 0, 0, 0);
+  // In working days mode, snap start to next working day
+  if (workingDaysMode) {
+    const calId = (overrides && overrides.calendarId) || getDefaultCalendarId();
+    now = nextWorkingDay(now, calId);
+  }
+  const startDate = now;
+  const finishDate = workingDaysMode
+    ? addWorkingDays(startDate, DEFAULT_TASK_DURATION_DAYS, (overrides && overrides.calendarId) || getDefaultCalendarId())
+    : new Date(startDate.getTime() + DEFAULT_TASK_DURATION_DAYS * MS_PER_DAY);
   const base = {
     id: 0, taskNumber: 0, outline: '1', depth: 1,
     name: DEFAULT_TASK_NAME,
-    start: now,
-    finish: new Date(now.getTime() + DEFAULT_TASK_DURATION_DAYS * MS_PER_DAY),
+    start: startDate,
+    finish: finishDate,
     duration: DEFAULT_TASK_DURATION_DAYS + ' days',
     labels: [], bucket: '', priority: '',
     dependsOn: '', percentComplete: 0, dependents: '', effort: '',

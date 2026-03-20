@@ -543,7 +543,41 @@ function populateFilterDropdowns() {
   [...bucketsSet].sort().forEach(b => selBucket.innerHTML += `<option value="${b}">${b}</option>`);
 }
 
+/**
+ * Snap task start/finish dates to valid working days.
+ * Start snaps forward, finish snaps forward (preserving duration).
+ * Only active in workingDaysMode. Skips parent tasks (they aggregate from children).
+ */
+function snapTaskToWorkingDays(task) {
+  if (!workingDaysMode) return;
+  if (task.children && task.children.length > 0) return; // parents aggregate
+  const calId = task.calendarId || getDefaultCalendarId();
+  if (task.start) {
+    const snapped = nextWorkingDay(task.start, calId);
+    if (snapped.getTime() !== task.start.getTime()) {
+      // Start moved forward: shift finish by same amount to preserve duration
+      if (task.finish) {
+        const shift = snapped.getTime() - task.start.getTime();
+        task.finish = new Date(task.finish.getTime() + shift);
+      }
+      task.start = snapped;
+    }
+  }
+  if (task.finish) {
+    const snappedFinish = prevWorkingDay(task.finish, calId);
+    if (snappedFinish.getTime() !== task.finish.getTime()) {
+      task.finish = snappedFinish;
+    }
+    // Ensure finish >= start
+    if (task.start && task.finish < task.start) {
+      task.finish = new Date(task.start);
+    }
+  }
+}
+
 function recalcDuration(task) {
+  // Always snap dates to working days before recalculating duration
+  snapTaskToWorkingDays(task);
   if (task.start && task.finish) {
     let days;
     if (workingDaysMode) {
@@ -581,6 +615,8 @@ function recalcFinishDates(forCalendarId) {
     const calId = task.calendarId || defaultCalId;
     // If scoped to a specific calendar, skip tasks not using it
     if (forCalendarId && calId !== forCalendarId) return;
+    // Snap start to working day first (in case it now falls on a new holiday)
+    task.start = nextWorkingDay(task.start, calId);
     task.finish = addWorkingDays(task.start, workDays, calId);
     task.duration = workDays + (workDays === 1 ? ' day' : ' days');
   });

@@ -372,14 +372,19 @@ function saveEditPanel() {
 
   const datesChanged = (newStart?.getTime() !== task.start?.getTime()) || (newFinish?.getTime() !== task.finish?.getTime());
   task.start = newStart;
+  // Snap start to working day immediately
+  if (workingDaysMode && task.start) {
+    const calId = task.calendarId || getDefaultCalendarId();
+    task.start = nextWorkingDay(task.start, calId);
+  }
 
-  if (durationManuallyChanged && newStart && newDurDays > 0) {
+  if (durationManuallyChanged && task.start && newDurDays > 0) {
     // Duration was edited: compute finish from start + duration
     const calId = task.calendarId || getDefaultCalendarId();
     if (workingDaysMode) {
-      task.finish = addWorkingDays(newStart, newDurDays, calId);
+      task.finish = addWorkingDays(task.start, newDurDays, calId);
     } else {
-      task.finish = new Date(newStart.getTime() + newDurDays * MS_PER_DAY);
+      task.finish = new Date(task.start.getTime() + newDurDays * MS_PER_DAY);
     }
     task.duration = newDurDays + (newDurDays === 1 ? ' day' : ' days');
     // Update the finish date picker in the panel

@@ -618,7 +618,8 @@ function renderDataTable() {
     const sortable = si ? `onclick="sortTable(${si})"` : '';
     const arrow = (sortCol === si) ? `<span class="sort-arrow ${sortDir}"></span>` : (si ? '<span class="sort-arrow"></span>' : '');
     const w = columnWidths[col.id] || DEFAULT_WIDTHS[col.id] || 100;
-    const wStyle = `style="width:${w}px;min-width:${col.id === 'select' ? 36 : 40}px"`;
+    const minW = (typeof MIN_COL_WIDTHS !== 'undefined' && MIN_COL_WIDTHS[col.id]) || MIN_COLUMN_WIDTH;
+    const wStyle = `style="width:${w}px;min-width:${minW}px"`;
     const resizeHandle = (col.id !== 'select') ? `<div class="col-resize-handle" data-col="${col.id}" onmousedown="startColResize(event,'${col.id}')"></div>` : '';
     if (col.id === 'select') {
       if (isDataEditMode) {

@@ -264,12 +264,14 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .data-table tbody tr.parent-row{background:rgba(0,0,0,.015)}
 [data-theme="dark"] .data-table tbody tr.parent-row{background:rgba(255,255,255,.02)}
 .data-table td{padding:.3rem .4rem;vertical-align:middle;white-space:nowrap}
-.data-table td input,.data-table td select,.data-table td textarea{background:transparent;border:1px solid transparent;border-radius:4px;padding:.2rem .3rem;font-family:inherit;font-size:.82rem;color:var(--body-fg);width:100%;transition:border-color .15s;outline:none}
+.data-table td input,.data-table td select,.data-table td textarea{background:transparent;border:1px solid transparent;border-radius:4px;padding:.2rem .3rem;font-family:inherit;font-size:.82rem;color:var(--body-fg);width:100%;transition:border-color .15s;outline:none;box-sizing:border-box}
 .data-table td input:focus,.data-table td select:focus,.data-table td textarea:focus{border-color:var(--blue);background:var(--card)}
-.data-table td input[type="date"]{width:120px;min-width:120px}
-.data-table td input[type="number"]{width:60px}
+.data-table td input[type="date"]{width:100%;min-width:0;padding-right:.15rem}
+.data-table td input[type="number"]{width:100%;min-width:0}
 .data-table td[data-col="name"],.data-table td[data-col="notes"],.data-table td[data-col="assigned"],.data-table td[data-col="deps"]{overflow:hidden;text-overflow:ellipsis}
-.data-table td[data-col="start"],.data-table td[data-col="finish"]{min-width:110px}
+.data-table td[data-col="start"],.data-table td[data-col="finish"]{min-width:115px;overflow:hidden}
+.data-table td[data-col="duration"]{min-width:58px}
+.data-table td[data-col="pct"]{min-width:90px}
 .data-table .cell-pct{display:flex;align-items:center;gap:.3rem}
 .data-table .cell-pct .mini-prog{width:40px;height:5px;background:var(--border);border-radius:3px;overflow:hidden;flex-shrink:0}
 .data-table .cell-pct .mini-prog .fill{height:100%;border-radius:3px;background:var(--green)}
@@ -478,8 +480,9 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .data-table.fit-mode { table-layout: auto; width: 100%; }
 .data-table.fit-mode th,
 .data-table.fit-mode td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.data-table.fit-mode td input[type="date"] { width: 100%; min-width: 0; }
+.data-table.fit-mode td input[type="date"] { width: 100%; }
 .data-table.scroll-mode { table-layout: fixed; }
+.data-table.scroll-mode td { overflow: hidden; }
 .data-table.fit-mode td[data-col="name"],.data-table.fit-mode td[data-col="notes"],.data-table.fit-mode td[data-col="assigned"],.data-table.fit-mode td[data-col="deps"]{max-width:0}
 .data-table th { position: relative; overflow: hidden; text-overflow: ellipsis; }
 #table-layout-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }

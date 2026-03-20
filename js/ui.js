@@ -996,8 +996,9 @@ function applyTableLayoutMode() {
 
   const visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
 
-  // Check if fit is even possible
-  const minNeeded = visCols.length * MIN_COLUMN_WIDTH + (isDataEditMode ? 28 : 0);
+  // Check if fit is even possible — sum per-column minimums
+  let minNeeded = isDataEditMode ? 28 : 0;
+  visCols.forEach(col => { minNeeded += (MIN_COL_WIDTHS && MIN_COL_WIDTHS[col.id]) || MIN_COLUMN_WIDTH; });
   const available = container.clientWidth || window.innerWidth;
   const fitPossible = minNeeded <= available;
 
@@ -1845,7 +1846,8 @@ function startColResize(e, colId) {
   const table = document.getElementById('data-table');
   function onMove(ev) {
     const diff = ev.clientX - _resizeStartX;
-    const newW = Math.max(40, _resizeStartW + diff);
+    const colMinW = (typeof MIN_COL_WIDTHS !== 'undefined' && MIN_COL_WIDTHS[_resizeCol]) || MIN_COLUMN_WIDTH;
+    const newW = Math.max(colMinW, _resizeStartW + diff);
     columnWidths[_resizeCol] = newW;
     th.style.width = newW + 'px';
     // Update table total width so it can grow beyond container

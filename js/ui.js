@@ -471,7 +471,7 @@ function saveEditPanel() {
     if (newCalId !== task.calendarId) {
       assignCalendarWithChildren(task, newCalId);
       invalidateHolidayCache();
-      allTasks.forEach(t => recalcDuration(t));
+      recalcFinishDates();
     }
   }
 
@@ -773,7 +773,7 @@ function renderCalendarSettingsHTML() {
 function toggleWorkingDaysMode(checked) {
   workingDaysMode = checked;
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   rebuildAfterChange();
   renderAll();
   if (currentTab === 'dati') renderDataTable();
@@ -816,7 +816,7 @@ function deleteCalendar(id) {
   ensureDefaultCalendar();
   _selectedCalId = Object.keys(calendars)[0];
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   renderSettingsBody();
   renderAll();
   if (currentTab === 'dati') renderDataTable();
@@ -826,7 +826,7 @@ function deleteCalendar(id) {
 function setDefaultCalendar(id) {
   Object.keys(calendars).forEach(k => calendars[k].isDefault = (k === id));
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   renderSettingsBody();
   renderAll();
   scheduleSave();
@@ -845,7 +845,7 @@ function submitCalendarHoliday(calId) {
   if (!dateEl.value) { showToast('Select a date', 'error'); return; }
   calendars[calId].entries.push({ type: 'holiday', date: dateEl.value, label: labelEl.value || 'Holiday' });
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   renderSettingsBody();
   renderAll();
   scheduleSave();
@@ -859,7 +859,7 @@ function submitCalendarClosure(calId) {
   if (startEl.value > endEl.value) { showToast('Start must be before end', 'error'); return; }
   calendars[calId].entries.push({ type: 'closure', startDate: startEl.value, endDate: endEl.value, label: labelEl.value || 'Closure' });
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   renderSettingsBody();
   renderAll();
   scheduleSave();
@@ -876,7 +876,7 @@ function updateCalendarEntry(calId, idx, field, value) {
     renderSettingsBody();
   }
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   renderAll();
   scheduleSave();
 }
@@ -884,7 +884,7 @@ function updateCalendarEntry(calId, idx, field, value) {
 function removeCalendarEntry(calId, idx) {
   calendars[calId].entries.splice(idx, 1);
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   renderSettingsBody();
   renderAll();
   scheduleSave();
@@ -968,7 +968,7 @@ function applyCalendarAssignment() {
   });
 
   invalidateHolidayCache();
-  allTasks.forEach(t => recalcDuration(t));
+  recalcFinishDates();
   rebuildAfterChange();
   renderAll();
   if (currentTab === 'dati') renderDataTable();
@@ -1207,8 +1207,8 @@ function toggleWorkingDays() {
   workingDaysMode = !workingDaysMode;
   const btn = document.getElementById('working-days-btn');
   if (btn) btn.classList.toggle('active', workingDaysMode);
-  // Recalc all durations
-  allTasks.forEach(t => recalcDuration(t));
+  // Recalc finish dates preserving working-day durations
+  recalcFinishDates();
   rebuildAfterChange();
   renderAll();
   if (currentTab === 'dati') renderDataTable();

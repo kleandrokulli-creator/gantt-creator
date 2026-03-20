@@ -1166,27 +1166,43 @@ function addNewTask() {
   scheduleSave();
 }
 
+// Template dependency references use taskNumber (sequential: 1,2,3,...).
+// Only leaf tasks have deps; parent dates are auto-aggregated from children.
+// Task numbering: parent=N, then children N+1, N+2, etc.
+//
+// Software: 1=Planning, 2=Req, 3=Design, 4=Dev, 5=Backend, 6=Frontend, 7=Integration,
+//           8=Testing, 9=Unit, 10=IntTest, 11=UAT, 12=Deploy, 13=Staging, 14=Release
+// Marketing: 1=Strategy, 2=Research, 3=Brief, 4=Content, 5=Copy, 6=Visual, 7=Review,
+//            8=Launch, 9=Setup, 10=Launch, 11=Monitor
+// Event: 1=Pre-plan, 2=Objectives, 3=Venue, 4=Vendors, 5=Prep, 6=Invitations,
+//        7=Catering, 8=Program, 9=Execution, 10=Setup, 11=EventDay, 12=Teardown
+// SAP: 1=Discover, 2=BPA, 3=Landscape, 4=Gap, 5=Prepare, 6=Onboard, 7=EnvSetup,
+//      8=DataMigStrat, 9=Cutover, 10=Explore, 11=Workshops, 12=ConfigDoc, 13=DevSpecs,
+//      14=Realize, 15=SysConfig, 16=CustomDev, 17=DataMigDev, 18=IntTest, 19=UAT,
+//      20=Deploy, 21=Training, 22=DataMigExec, 23=GoLive, 24=Hypercare,
+//      25=Run, 26=Handover, 27=Monitoring, 28=Closure
+
 const PROJECT_TEMPLATES = {
   software: {
     name: 'Software Development',
     tasks: [
       { outline: '1', name: 'Planning', days: 5, children: [
         { outline: '1.1', name: 'Requirements gathering', days: 3 },
-        { outline: '1.2', name: 'Technical design', days: 2, dep: '1' }
+        { outline: '1.2', name: 'Technical design', days: 2, dep: '2' }
       ]},
-      { outline: '2', name: 'Development', days: 15, dep: '1', children: [
-        { outline: '2.1', name: 'Backend development', days: 10 },
-        { outline: '2.2', name: 'Frontend development', days: 10 },
-        { outline: '2.3', name: 'Integration', days: 5, dep: '4,5' }
+      { outline: '2', name: 'Development', days: 15, children: [
+        { outline: '2.1', name: 'Backend development', days: 10, dep: '3' },
+        { outline: '2.2', name: 'Frontend development', days: 10, dep: '3' },
+        { outline: '2.3', name: 'Integration', days: 5, dep: '5,6' }
       ]},
-      { outline: '3', name: 'Testing', days: 7, dep: '2', children: [
-        { outline: '3.1', name: 'Unit testing', days: 3 },
-        { outline: '3.2', name: 'Integration testing', days: 2, dep: '8' },
-        { outline: '3.3', name: 'User acceptance testing', days: 2, dep: '9' }
+      { outline: '3', name: 'Testing', days: 7, children: [
+        { outline: '3.1', name: 'Unit testing', days: 3, dep: '7' },
+        { outline: '3.2', name: 'Integration testing', days: 2, dep: '9' },
+        { outline: '3.3', name: 'User acceptance testing', days: 2, dep: '10' }
       ]},
-      { outline: '4', name: 'Deployment', days: 2, dep: '3', children: [
-        { outline: '4.1', name: 'Staging deployment', days: 1 },
-        { outline: '4.2', name: 'Production release', days: 0, dep: '12' }
+      { outline: '4', name: 'Deployment', days: 2, children: [
+        { outline: '4.1', name: 'Staging deployment', days: 1, dep: '11' },
+        { outline: '4.2', name: 'Production release', days: 0, dep: '13' }
       ]}
     ]
   },
@@ -1195,17 +1211,17 @@ const PROJECT_TEMPLATES = {
     tasks: [
       { outline: '1', name: 'Strategy', days: 5, children: [
         { outline: '1.1', name: 'Market research', days: 3 },
-        { outline: '1.2', name: 'Campaign brief', days: 2, dep: '1' }
+        { outline: '1.2', name: 'Campaign brief', days: 2, dep: '2' }
       ]},
-      { outline: '2', name: 'Content Creation', days: 10, dep: '1', children: [
-        { outline: '2.1', name: 'Copywriting', days: 5 },
-        { outline: '2.2', name: 'Visual design', days: 7 },
-        { outline: '2.3', name: 'Review & approval', days: 3, dep: '4,5' }
+      { outline: '2', name: 'Content Creation', days: 10, children: [
+        { outline: '2.1', name: 'Copywriting', days: 5, dep: '3' },
+        { outline: '2.2', name: 'Visual design', days: 7, dep: '3' },
+        { outline: '2.3', name: 'Review & approval', days: 3, dep: '5,6' }
       ]},
-      { outline: '3', name: 'Launch', days: 5, dep: '2', children: [
-        { outline: '3.1', name: 'Channel setup', days: 2 },
-        { outline: '3.2', name: 'Campaign launch', days: 0, dep: '8' },
-        { outline: '3.3', name: 'Monitor & optimize', days: 5, dep: '9' }
+      { outline: '3', name: 'Launch', days: 5, children: [
+        { outline: '3.1', name: 'Channel setup', days: 2, dep: '7' },
+        { outline: '3.2', name: 'Campaign launch', days: 0, dep: '9' },
+        { outline: '3.3', name: 'Monitor & optimize', days: 5, dep: '10' }
       ]}
     ]
   },
@@ -1214,18 +1230,18 @@ const PROJECT_TEMPLATES = {
     tasks: [
       { outline: '1', name: 'Pre-planning', days: 10, children: [
         { outline: '1.1', name: 'Define objectives & budget', days: 3 },
-        { outline: '1.2', name: 'Venue selection', days: 5, dep: '1' },
-        { outline: '1.3', name: 'Vendor contracts', days: 5, dep: '2' }
+        { outline: '1.2', name: 'Venue selection', days: 5, dep: '2' },
+        { outline: '1.3', name: 'Vendor contracts', days: 5, dep: '3' }
       ]},
-      { outline: '2', name: 'Preparation', days: 15, dep: '1', children: [
-        { outline: '2.1', name: 'Invitations & registration', days: 5 },
-        { outline: '2.2', name: 'Catering & logistics', days: 7 },
-        { outline: '2.3', name: 'Program & speakers', days: 10 }
+      { outline: '2', name: 'Preparation', days: 15, children: [
+        { outline: '2.1', name: 'Invitations & registration', days: 5, dep: '4' },
+        { outline: '2.2', name: 'Catering & logistics', days: 7, dep: '4' },
+        { outline: '2.3', name: 'Program & speakers', days: 10, dep: '4' }
       ]},
-      { outline: '3', name: 'Execution', days: 3, dep: '2', children: [
-        { outline: '3.1', name: 'Setup', days: 1 },
-        { outline: '3.2', name: 'Event day', days: 1, dep: '8' },
-        { outline: '3.3', name: 'Teardown & follow-up', days: 1, dep: '9' }
+      { outline: '3', name: 'Execution', days: 3, children: [
+        { outline: '3.1', name: 'Setup', days: 1, dep: '6,7,8' },
+        { outline: '3.2', name: 'Event day', days: 1, dep: '10' },
+        { outline: '3.3', name: 'Teardown & follow-up', days: 1, dep: '11' }
       ]}
     ]
   },
@@ -1234,37 +1250,37 @@ const PROJECT_TEMPLATES = {
     tasks: [
       { outline: '1', name: 'Discover', days: 15, children: [
         { outline: '1.1', name: 'Business process analysis', days: 5 },
-        { outline: '1.2', name: 'System landscape review', days: 5, dep: '1' },
-        { outline: '1.3', name: 'Gap analysis & requirements', days: 5, dep: '2' }
+        { outline: '1.2', name: 'System landscape review', days: 5, dep: '2' },
+        { outline: '1.3', name: 'Gap analysis & requirements', days: 5, dep: '3' }
       ]},
-      { outline: '2', name: 'Prepare', days: 15, dep: '1', children: [
-        { outline: '2.1', name: 'Project team onboarding', days: 3 },
-        { outline: '2.2', name: 'Environment setup & provisioning', days: 5, dep: '5' },
-        { outline: '2.3', name: 'Data migration strategy', days: 5, dep: '5' },
-        { outline: '2.4', name: 'Cutover plan', days: 2, dep: '6,7' }
+      { outline: '2', name: 'Prepare', days: 15, children: [
+        { outline: '2.1', name: 'Project team onboarding', days: 3, dep: '4' },
+        { outline: '2.2', name: 'Environment setup & provisioning', days: 5, dep: '6' },
+        { outline: '2.3', name: 'Data migration strategy', days: 5, dep: '6' },
+        { outline: '2.4', name: 'Cutover plan', days: 2, dep: '7,8' }
       ]},
-      { outline: '3', name: 'Explore', days: 20, dep: '2', children: [
-        { outline: '3.1', name: 'Fit-to-standard workshops', days: 10 },
-        { outline: '3.2', name: 'Configuration documentation', days: 5, dep: '10' },
-        { outline: '3.3', name: 'Custom development specs', days: 5, dep: '11' }
+      { outline: '3', name: 'Explore', days: 20, children: [
+        { outline: '3.1', name: 'Fit-to-standard workshops', days: 10, dep: '9' },
+        { outline: '3.2', name: 'Configuration documentation', days: 5, dep: '11' },
+        { outline: '3.3', name: 'Custom development specs', days: 5, dep: '12' }
       ]},
-      { outline: '4', name: 'Realize', days: 30, dep: '3', children: [
-        { outline: '4.1', name: 'System configuration', days: 10 },
-        { outline: '4.2', name: 'Custom development (ABAP/Fiori)', days: 15 },
-        { outline: '4.3', name: 'Data migration development', days: 10, dep: '14' },
-        { outline: '4.4', name: 'Integration testing', days: 5, dep: '15,16' },
-        { outline: '4.5', name: 'User acceptance testing', days: 5, dep: '17' }
+      { outline: '4', name: 'Realize', days: 30, children: [
+        { outline: '4.1', name: 'System configuration', days: 10, dep: '13' },
+        { outline: '4.2', name: 'Custom development (ABAP/Fiori)', days: 15, dep: '13' },
+        { outline: '4.3', name: 'Data migration development', days: 10, dep: '15' },
+        { outline: '4.4', name: 'Integration testing', days: 5, dep: '16,17' },
+        { outline: '4.5', name: 'User acceptance testing', days: 5, dep: '18' }
       ]},
-      { outline: '5', name: 'Deploy', days: 10, dep: '4', children: [
-        { outline: '5.1', name: 'End-user training', days: 5 },
-        { outline: '5.2', name: 'Data migration execution', days: 3, dep: '20' },
-        { outline: '5.3', name: 'Go-live', days: 0, dep: '21' },
-        { outline: '5.4', name: 'Hypercare support', days: 5, dep: '22' }
+      { outline: '5', name: 'Deploy', days: 10, children: [
+        { outline: '5.1', name: 'End-user training', days: 5, dep: '19' },
+        { outline: '5.2', name: 'Data migration execution', days: 3, dep: '21' },
+        { outline: '5.3', name: 'Go-live', days: 0, dep: '22' },
+        { outline: '5.4', name: 'Hypercare support', days: 5, dep: '23' }
       ]},
-      { outline: '6', name: 'Run', days: 10, dep: '5', children: [
-        { outline: '6.1', name: 'Operational handover', days: 3 },
-        { outline: '6.2', name: 'Performance monitoring', days: 5, dep: '25' },
-        { outline: '6.3', name: 'Project closure', days: 0, dep: '26' }
+      { outline: '6', name: 'Run', days: 10, children: [
+        { outline: '6.1', name: 'Operational handover', days: 3, dep: '24' },
+        { outline: '6.2', name: 'Performance monitoring', days: 5, dep: '26' },
+        { outline: '6.3', name: 'Project closure', days: 0, dep: '27' }
       ]}
     ]
   }

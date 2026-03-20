@@ -790,24 +790,28 @@ input:focus-visible, textarea:focus-visible {
   position: sticky;
   z-index: 5;
   background: var(--card);
+  border-right: 1px solid var(--border);
 }
 /* Use a CSS custom property for the name column left offset */
 .data-table th[data-col-id="name"] { left: var(--sticky-name-left, 36px); }
 .data-table td[data-col="name"] { left: var(--sticky-name-left, 36px); }
-/* Ensure hover row bg also applies to sticky cells */
+/* Ensure hover row bg also applies to sticky cells — must be OPAQUE to hide scrolling content */
 .data-table tbody tr:hover > td[data-col="select"],
-.data-table tbody tr:hover > td[data-col="name"] { background: var(--row-hover); }
+.data-table tbody tr:hover > td[data-col="name"] { background: color-mix(in srgb, var(--blue) 8%, var(--card)); }
 .data-table tbody tr.dt-level1 > td[data-col="select"],
 .data-table tbody tr.dt-level1 > td[data-col="name"] { background: color-mix(in srgb, var(--blue) 5%, var(--card)); }
 .data-table tbody tr:nth-child(even) > td[data-col="select"],
-.data-table tbody tr:nth-child(even) > td[data-col="name"] { background: color-mix(in srgb, var(--row-alt) 100%, var(--card)); }
+.data-table tbody tr:nth-child(even) > td[data-col="name"] { background: var(--card); }
+/* dt-complete: apply opacity per-cell, keep sticky cells opaque */
+.data-table tr.dt-complete > td[data-col="select"],
+.data-table tr.dt-complete > td[data-col="name"] { opacity: 1; background: var(--card); }
 
 
 /* ===== FEATURE 3: CONDITIONAL FORMATTING ===== */
 .data-table tr.dt-overdue > td[data-col="finish"] { color: var(--red); font-weight: 600; }
 .data-table tr.dt-overdue > td[data-col="start"] { color: var(--red); }
 .data-table tr.dt-complete > td[data-col="pct"] .mini-prog .fill { background: var(--green) !important; }
-.data-table tr.dt-complete { opacity: 0.7; }
+.data-table tr.dt-complete > td { opacity: 0.7; }
 .dt-cell-warn { outline: 2px solid var(--amber) !important; outline-offset: -2px; }
 
 
@@ -993,8 +997,8 @@ input:focus-visible, textarea:focus-visible {
 
 
 /* ===== FEATURE 12: ROW STRIPING BY GROUP ===== */
-.data-table tr.dt-group-alt > td { background: color-mix(in srgb, var(--blue) 2%, transparent); }
-[data-theme="dark"] .data-table tr.dt-group-alt > td { background: rgba(59,130,246,.03); }
+.data-table tr.dt-group-alt > td { background: color-mix(in srgb, var(--blue) 2%, var(--card)); }
+[data-theme="dark"] .data-table tr.dt-group-alt > td { background: color-mix(in srgb, var(--blue) 3%, var(--card)); }
 
 
 /* ===== FEATURE 13: FILL HANDLE ===== */

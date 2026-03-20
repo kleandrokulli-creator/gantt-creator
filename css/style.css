@@ -82,6 +82,8 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .toolbar .sep{width:1px;height:20px;background:var(--border);flex-shrink:0}
 .btn-icon{display:inline-flex;align-items:center;gap:.3rem}
 .btn-icon svg{width:14px;height:14px}
+.btn-icon.btn-sm{font-size:.7rem;padding:.25rem .4rem}
+.btn-icon.btn-sm svg{width:12px;height:12px}
 
 
 /* ===== TAB BAR ===== */
@@ -149,6 +151,12 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .tl-row-line{position:absolute;left:0;right:0;height:1px;background:var(--border);opacity:.4;z-index:1}
 .tl-today{position:absolute;top:0;width:2px;height:100%;background:var(--red);opacity:.7;z-index:5}
 .tl-today::before{content:'Today';position:absolute;top:-16px;left:-12px;font-size:.5rem;color:var(--red);font-weight:600;white-space:nowrap}
+
+/* Weekend shading */
+.tl-weekend{position:absolute;top:0;height:100%;background:var(--body-fg);opacity:.03;z-index:0;pointer-events:none}
+.tl-weekend-header{position:absolute;top:0;background:var(--body-fg);opacity:.04;z-index:0;pointer-events:none}
+.tl-day-label{position:absolute;top:54px;font-size:.5rem;color:var(--grey-txt);white-space:nowrap;display:flex;align-items:center;justify-content:center;height:18px}
+.tl-day-label.weekend{color:var(--red);opacity:.5}
 
 .tl-bar-row{position:absolute;left:0;right:0;display:flex;align-items:center}
 .tl-bar{position:absolute;border-radius:0;cursor:pointer;transition:filter .15s,transform .15s;z-index:2}

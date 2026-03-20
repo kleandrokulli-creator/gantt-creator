@@ -62,6 +62,7 @@ let navStack = [];
 let milestoneInline = true;
 let showArrows = true;
 let currentZoom = 'month';
+let workingDaysMode = false;   // true = show working days durations (Mon-Fri), dim weekends
 let minDate, maxDate, totalDays, canvasWidth;
 let filteredTree = [];
 let selectedRows = new Set();

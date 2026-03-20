@@ -110,7 +110,8 @@ function saveCurrentProjectToStorage() {
     customBuckets: [...customBuckets],
     visibleColumns: [...visibleColumns],
     columnWidths: { ...columnWidths },
-    tableScrollMode: tableScrollMode
+    tableScrollMode: tableScrollMode,
+    workingDaysMode: workingDaysMode
   };
   try {
     localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
@@ -172,6 +173,9 @@ function loadProjectById(id) {
   }
   columnWidths = proj.columnWidths || {};
   tableScrollMode = proj.tableScrollMode || false;
+  workingDaysMode = proj.workingDaysMode || false;
+  const wdBtn = document.getElementById('working-days-btn');
+  if (wdBtn) wdBtn.classList.toggle('active', workingDaysMode);
   getState().allExpanded = false;
   undoStack = [];
   updateShowAllBtn();
@@ -437,9 +441,16 @@ function computeDateRange() {
     dMin = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     dMax = new Date(now.getFullYear(), now.getMonth() + 3, 0).getTime();
   }
-  minDate = new Date(dMin - 7 * MS_PER_DAY);
-  maxDate = new Date(dMax + 7 * MS_PER_DAY);
-  minDate.setDate(1);
+  // Use smart padding when available (after ui.js is loaded), otherwise fallback
+  if (typeof _smartDatePadding === 'function') {
+    const range = _smartDatePadding(dMin, dMax);
+    minDate = range.min;
+    maxDate = range.max;
+  } else {
+    minDate = new Date(dMin - 7 * MS_PER_DAY);
+    maxDate = new Date(dMax + 7 * MS_PER_DAY);
+    minDate.setDate(1);
+  }
 }
 
 function populateFilterDropdowns() {
@@ -459,11 +470,17 @@ function populateFilterDropdowns() {
 
 function recalcDuration(task) {
   if (task.start && task.finish) {
-    const diffMs = task.finish.getTime() - task.start.getTime();
-    const rawDays = Math.round(diffMs / MS_PER_DAY);
-    // Same-day task = 1 day (occupies that day), NOT a milestone
-    // Only explicit milestones (isMilestone flag) should be 0 days
-    const days = rawDays === 0 ? (task.isMilestone ? 0 : 1) : rawDays;
+    let days;
+    if (workingDaysMode) {
+      days = countWorkingDays(task.start, task.finish);
+      if (task.isMilestone) days = 0;
+    } else {
+      const diffMs = task.finish.getTime() - task.start.getTime();
+      const rawDays = Math.round(diffMs / MS_PER_DAY);
+      // Same-day task = 1 day (occupies that day), NOT a milestone
+      // Only explicit milestones (isMilestone flag) should be 0 days
+      days = rawDays === 0 ? (task.isMilestone ? 0 : 1) : rawDays;
+    }
     task.duration = days + (days === 1 ? ' day' : ' days');
   }
 }

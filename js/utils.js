@@ -80,6 +80,27 @@ function getBarBackground(barColors) {
   return `repeating-linear-gradient(135deg, ${stops.join(', ')})`;
 }
 
+/** Count working days (Mon-Fri) between two dates, inclusive of start, exclusive of end */
+function countWorkingDays(start, end) {
+  if (!start || !end) return 0;
+  let count = 0;
+  const d = new Date(start);
+  d.setHours(0, 0, 0, 0);
+  const endTime = new Date(end).setHours(0, 0, 0, 0);
+  while (d.getTime() < endTime) {
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.max(count, 1); // at least 1 if same-day
+}
+
+/** Check if a date falls on a weekend (Sat or Sun) */
+function isWeekend(date) {
+  const d = date.getDay();
+  return d === 0 || d === 6;
+}
+
 function getMilestoneColor(task) {
   if (task.priority && PRIORITY_COLORS[task.priority]) return PRIORITY_COLORS[task.priority];
   return task.color || '#F59E0B';

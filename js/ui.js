@@ -4,6 +4,8 @@
 
 /* ---------- EDIT PANEL ---------- */
 
+let _epInitialAutoColor = '';   // tracks the auto-color when panel first opened
+
 function openEditPanel(taskId) {
   editPanelTaskId = taskId;
   const task = allTasks.find(t => t.id === taskId);
@@ -13,6 +15,9 @@ function openEditPanel(taskId) {
   const isParent = task.children && task.children.length > 0;
   const bucketsArr = getAllBuckets();
   const allLabels = Object.keys(LABEL_COLORS);
+  // Store the auto-color at panel-open time so saveEditPanel can detect user changes
+  _epInitialAutoColor = ((task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
+    : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)).toLowerCase();
   allTasks.forEach(t => t.labels.forEach(l => { if (!allLabels.includes(l)) allLabels.push(l); }));
 
   let html = `
@@ -147,11 +152,12 @@ function resetTaskColor() {
   if (!task) return;
   task.colorOverride = '';
   reassignColors();
-  // Update the color picker UI
+  // Update the color picker UI and sync the initial tracker
   const epColor = document.getElementById('ep-color');
   if (epColor) {
     epColor.value = task.color || DEFAULT_COLOR;
     epColor.classList.remove('active');
+    _epInitialAutoColor = (task.color || DEFAULT_COLOR).toLowerCase();
   }
   // Update the auto-color circle
   const autoCircle = document.querySelector('.ep-color-auto');
@@ -272,6 +278,8 @@ function openDataLabelPicker(cell, taskId) {
         return `<span class="tag" style="background:${cc}22;color:${cc}">${esc(lb)}</span>`;
       }).join('');
       cell.innerHTML = tagsHtml + '<span class="tag-add-hint">+</span>';
+      if (currentTab === 'roadmap') renderAll();
+      if (typeof refreshLegendIfOpen === 'function') refreshLegendIfOpen();
       scheduleSave();
     };
     picker.appendChild(tag);
@@ -340,12 +348,19 @@ function saveEditPanel() {
   task.effort = document.getElementById('ep-effort').value;
   task.notes = document.getElementById('ep-notes').value;
 
-  // Color override - clear if it matches the new auto color (case-insensitive hex compare)
+  // Color override — only set if user actually interacted with the color picker
   const epColor = document.getElementById('ep-color');
   if (epColor) {
-    const autoColor = (task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
-      : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR);
-    task.colorOverride = (epColor.value.toLowerCase() !== autoColor.toLowerCase()) ? epColor.value : '';
+    const pickerVal = epColor.value.toLowerCase();
+    const newAutoColor = ((task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
+      : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)).toLowerCase();
+    // If picker still shows the auto-color from when the panel opened,
+    // or matches the new auto-color, it means user didn't manually pick — clear override
+    if (pickerVal === newAutoColor || pickerVal === _epInitialAutoColor) {
+      task.colorOverride = '';
+    } else {
+      task.colorOverride = epColor.value;
+    }
   }
 
   rebuildAfterChange();
@@ -626,9 +641,30 @@ function getScopeDateRange(nodes) {
   }
   walk(nodes);
   if (dMin === Infinity) return null;
-  const mn = new Date(dMin - 7 * MS_PER_DAY);
-  const mx = new Date(dMax + 7 * MS_PER_DAY);
-  mn.setDate(1);
+  return _smartDatePadding(dMin, dMax);
+}
+
+/** Zoom-aware date padding — avoid showing empty past months at higher zoom levels */
+function _smartDatePadding(dMin, dMax) {
+  const mn = new Date(dMin);
+  const mx = new Date(dMax);
+
+  if (currentZoom === 'day') {
+    // Day view: just 3 days of padding on each side
+    mn.setTime(mn.getTime() - 3 * MS_PER_DAY);
+    mx.setTime(mx.getTime() + 3 * MS_PER_DAY);
+  } else if (currentZoom === 'week') {
+    // Week view: round start to the Monday before the first task, plus 1 week buffer
+    mn.setTime(mn.getTime() - 7 * MS_PER_DAY);
+    const dow = mn.getDay() || 7;
+    mn.setDate(mn.getDate() - dow + 1); // snap to Monday
+    mx.setTime(mx.getTime() + 7 * MS_PER_DAY);
+  } else {
+    // Month view: round start to the 1st of the month before
+    mn.setTime(mn.getTime() - 7 * MS_PER_DAY);
+    mn.setDate(1);
+    mx.setTime(mx.getTime() + 7 * MS_PER_DAY);
+  }
   return { min: mn, max: mx };
 }
 
@@ -738,6 +774,19 @@ function setZoom(level) {
   document.querySelectorAll('#zoom-month,#zoom-week,#zoom-day').forEach(b => b.classList.remove('active'));
   document.getElementById('zoom-' + level).classList.add('active');
   renderAll();
+}
+
+function toggleWorkingDays() {
+  workingDaysMode = !workingDaysMode;
+  const btn = document.getElementById('working-days-btn');
+  if (btn) btn.classList.toggle('active', workingDaysMode);
+  // Recalc all durations
+  allTasks.forEach(t => recalcDuration(t));
+  rebuildAfterChange();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+  showToast(workingDaysMode ? 'Working days mode (Mon-Fri)' : 'Calendar days mode (all days)', 'info', 2000);
 }
 
 function setDepth(val) {

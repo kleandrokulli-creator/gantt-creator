@@ -49,7 +49,9 @@ function renderProjectInfo() {
     const topLevel = allTasks.filter(t => t.depth === 1);
     let totalWeight = 0, weightedPct = 0;
     topLevel.forEach(t => {
-      const days = (t.start && t.finish) ? Math.max(Math.round((t.finish - t.start) / MS_PER_DAY), 1) : 1;
+      const days = (t.start && t.finish)
+        ? (workingDaysMode ? countWorkingDays(t.start, t.finish) : Math.max(Math.round((t.finish - t.start) / MS_PER_DAY), 1))
+        : 1;
       totalWeight += days;
       weightedPct += t.percentComplete * days;
     });
@@ -330,6 +332,26 @@ function renderTimelineHeader(dpx) {
     wd = new Date(wd.getTime() + 7 * MS_PER_DAY);
   }
 
+  // Day-level labels at Day zoom
+  if (currentZoom === 'day') {
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    let dd = new Date(minDate); dd.setHours(0, 0, 0, 0);
+    while (dd <= maxDate) {
+      const x = dateToPxR(dd, dpx);
+      const dayW = dpx.day;
+      const dayOfWeek = dd.getDay();
+      const isWE = dayOfWeek === 0 || dayOfWeek === 6;
+      if (dayW > 18) {
+        const label = dayW > 30 ? dayNames[dayOfWeek] : dd.getDate();
+        html += `<div class="tl-day-label${isWE ? ' weekend' : ''}" style="left:${x}px;width:${dayW}px">${label}</div>`;
+      }
+      if (isWE) {
+        html += `<div class="tl-weekend-header" style="left:${x}px;width:${dayW}px;height:${headerH}px"></div>`;
+      }
+      dd = new Date(dd.getTime() + MS_PER_DAY);
+    }
+  }
+
   // Month vertical lines
   d = new Date(minDate); d.setDate(1);
   while (d <= maxDate) {
@@ -370,6 +392,23 @@ function renderTimelineBars(dpx) {
       wd.setDate(wd.getDate() + 7);
     }
     d = next;
+  }
+
+  // Weekend shading (only at week/day zoom, or always in working-days mode)
+  if (currentZoom !== 'month' || workingDaysMode) {
+    const satW = dpx[currentZoom]; // 1 day width
+    if (satW >= 2) { // only if wide enough to be visible
+      let wd2 = new Date(minDate);
+      wd2.setHours(0, 0, 0, 0);
+      while (wd2 <= maxDate) {
+        const dayOfWeek = wd2.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          const wx = dateToPxR(wd2, dpx);
+          html += `<div class="tl-weekend" style="left:${wx}px;width:${Math.max(satW, 1)}px"></div>`;
+        }
+        wd2 = new Date(wd2.getTime() + MS_PER_DAY);
+      }
+    }
   }
 
   // Today line

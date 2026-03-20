@@ -856,6 +856,7 @@ async function doHTMLExport(btnEl) {
       milestoneInline: milestoneInline,
       showArrows: showArrows,
       currentZoom: currentZoom,
+      workingDaysMode: workingDaysMode,
     };
 
     const projectName = projects[currentProjectId]?.name || 'Roadmap';
@@ -915,6 +916,12 @@ body { padding-top: 0; }
 .ro-title-name { font-size: 1.2rem; font-weight: 700; }
 .ro-title-meta { font-size: 0.75rem; opacity: 0.6; font-weight: 400; }
 .toolbar { border-top: none; }
+.btn-icon.btn-sm{font-size:.7rem;padding:.25rem .4rem}
+.btn-icon.btn-sm svg{width:12px;height:12px}
+.tl-weekend{position:absolute;top:0;height:100%;background:var(--body-fg);opacity:.03;z-index:0;pointer-events:none}
+.tl-weekend-header{position:absolute;top:0;background:var(--body-fg);opacity:.04;z-index:0;pointer-events:none}
+.tl-day-label{position:absolute;top:54px;font-size:.5rem;color:var(--grey-txt);white-space:nowrap;display:flex;align-items:center;justify-content:center;height:18px}
+.tl-day-label.weekend{color:var(--red);opacity:.5}
 .legend-bar{border-top:1px solid var(--border);background:var(--card);padding:0;overflow:hidden;max-height:0;transition:max-height .25s ease,padding .25s ease}
 .legend-bar.open{max-height:200px;padding:.5rem .8rem}
 .legend-content{display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-start}
@@ -944,6 +951,10 @@ body { padding-top: 0; }
     <button onclick="setZoom('month')" id="zoom-month" class="active">Month</button>
     <button onclick="setZoom('week')" id="zoom-week">Week</button>
     <button onclick="setZoom('day')" id="zoom-day">Day</button>
+    <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" title="Toggle working days (Mon-Fri) / calendar days">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+      <span>Mon-Fri</span>
+    </button>
     <div class="sep"></div>
     <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">
       <option value="1" selected>Level 1</option>
@@ -1055,6 +1066,7 @@ ${_getMinimalUICode()}
   milestoneInline = d.milestoneInline !== false;
   showArrows = d.showArrows !== false;
   currentZoom = d.currentZoom || 'month';
+  workingDaysMode = d.workingDaysMode || false;
   projectMeta = d.projectMeta || {};
 
   // Deserialize tasks
@@ -1072,9 +1084,11 @@ ${_getMinimalUICode()}
   if (typeof computeDateRange === 'function') computeDateRange();
   if (typeof populateFilterDropdowns === 'function') populateFilterDropdowns();
 
-  // Set MS Inline button state
+  // Set button states
   const msBtn = document.getElementById('ms-inline-btn');
   if (msBtn) msBtn.classList.toggle('active', milestoneInline);
+  const wdBtn = document.getElementById('working-days-btn');
+  if (wdBtn) wdBtn.classList.toggle('active', workingDaysMode);
 
   renderAll();
 
@@ -1210,24 +1224,50 @@ function getCurrentScope() {
   const t = allTasks.find(x => x.id === last.taskId);
   return t ? (t.filteredChildren || t.children) : taskTree;
 }
+function countWorkingDays(start, end) {
+  if (!start || !end) return 0;
+  var count = 0, d = new Date(start);
+  d.setHours(0,0,0,0);
+  var endTime = new Date(end).setHours(0,0,0,0);
+  while (d.getTime() < endTime) {
+    var day = d.getDay();
+    if (day !== 0 && day !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.max(count, 1);
+}
+function isWeekend(date) { var d = date.getDay(); return d === 0 || d === 6; }
+function _smartDatePadding(dMin, dMax) {
+  var mn = new Date(dMin), mx = new Date(dMax);
+  if (currentZoom === 'day') {
+    mn.setTime(mn.getTime() - 3 * 86400000);
+    mx.setTime(mx.getTime() + 3 * 86400000);
+  } else if (currentZoom === 'week') {
+    mn.setTime(mn.getTime() - 7 * 86400000);
+    var dow = mn.getDay() || 7;
+    mn.setDate(mn.getDate() - dow + 1);
+    mx.setTime(mx.getTime() + 7 * 86400000);
+  } else {
+    mn.setTime(mn.getTime() - 7 * 86400000);
+    mn.setDate(1);
+    mx.setTime(mx.getTime() + 7 * 86400000);
+  }
+  return { min: mn, max: mx };
+}
 function getScopeDateRange(scope) {
-  let mn = null, mx = null;
+  let mn = Infinity, mx = -Infinity;
   function walk(nodes) {
     nodes.forEach(t => {
-      if (t.start && (!mn || t.start < mn)) mn = t.start;
-      if (t.finish && (!mx || t.finish > mx)) mx = t.finish;
-      if (t.start && !t.finish && (!mx || t.start > mx)) mx = t.start;
+      if (t.start && t.start.getTime() < mn) mn = t.start.getTime();
+      if (t.finish && t.finish.getTime() > mx) mx = t.finish.getTime();
+      if (t.start && !t.finish && t.start.getTime() > mx) mx = t.start.getTime();
       const ch = t.filteredChildren || t.children;
       if (ch && ch.length) walk(ch);
     });
   }
   walk(scope);
-  if (mn && mx) {
-    mn = new Date(mn); mn.setDate(mn.getDate() - 7);
-    mx = new Date(mx); mx.setDate(mx.getDate() + 14);
-    return { min: mn, max: mx };
-  }
-  return null;
+  if (mn === Infinity) return null;
+  return _smartDatePadding(mn, mx);
 }
 
 function setZoom(z) {
@@ -1288,6 +1328,25 @@ function toggleArrows() {
   showArrows = !showArrows;
   const lbl = document.getElementById('arrows-label');
   if (lbl) lbl.textContent = showArrows ? 'Hide Dependencies' : 'Show Dependencies';
+  renderAll();
+}
+function toggleWorkingDays() {
+  workingDaysMode = !workingDaysMode;
+  var btn = document.getElementById('working-days-btn');
+  if (btn) btn.classList.toggle('active', workingDaysMode);
+  allTasks.forEach(function(t) {
+    if (t.start && t.finish) {
+      var days;
+      if (workingDaysMode) {
+        days = countWorkingDays(t.start, t.finish);
+        if (t.isMilestone) days = 0;
+      } else {
+        var raw = Math.round((t.finish - t.start) / 86400000);
+        days = raw === 0 ? (t.isMilestone ? 0 : 1) : raw;
+      }
+      t.duration = days + (days === 1 ? ' day' : ' days');
+    }
+  });
   renderAll();
 }
 function scrollToToday() {

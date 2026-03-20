@@ -2,7 +2,48 @@
    UI.JS — Edit panel, settings modal, tooltip, interactions
    =================================================================== */
 
+/* ---------- EXPORT DROPDOWN ---------- */
+
+let _exportMenuListener = null;
+
+function toggleExportMenu() {
+  const menu = document.getElementById('export-menu');
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  if (isOpen) {
+    closeExportMenu();
+  } else {
+    // Position menu using fixed coords so it escapes any overflow:hidden/auto parent
+    const btn = document.querySelector('#export-dropdown > button');
+    if (btn) {
+      const r = btn.getBoundingClientRect();
+      menu.style.position = 'fixed';
+      menu.style.top = (r.bottom + 4) + 'px';
+      menu.style.right = (window.innerWidth - r.right) + 'px';
+      menu.style.left = 'auto';
+    }
+    menu.classList.add('open');
+    // Clean up any stale listener before adding new one
+    if (_exportMenuListener) document.removeEventListener('click', _exportMenuListener);
+    _exportMenuListener = function(e) {
+      if (!e.target.closest('#export-dropdown')) closeExportMenu();
+    };
+    setTimeout(() => document.addEventListener('click', _exportMenuListener), 0);
+  }
+}
+
+function closeExportMenu() {
+  const menu = document.getElementById('export-menu');
+  if (menu) menu.classList.remove('open');
+  if (_exportMenuListener) {
+    document.removeEventListener('click', _exportMenuListener);
+    _exportMenuListener = null;
+  }
+}
+
 /* ---------- EDIT PANEL ---------- */
+
+let _epInitialAutoColor = '';   // tracks the auto-color when panel first opened
 
 function openEditPanel(taskId) {
   editPanelTaskId = taskId;
@@ -13,6 +54,9 @@ function openEditPanel(taskId) {
   const isParent = task.children && task.children.length > 0;
   const bucketsArr = getAllBuckets();
   const allLabels = Object.keys(LABEL_COLORS);
+  // Store the auto-color at panel-open time so saveEditPanel can detect user changes
+  _epInitialAutoColor = ((task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
+    : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)).toLowerCase();
   allTasks.forEach(t => t.labels.forEach(l => { if (!allLabels.includes(l)) allLabels.push(l); }));
 
   let html = `
@@ -81,12 +125,13 @@ function openEditPanel(taskId) {
       <select id="ep-calendar">${Object.keys(calendars).map(id => `<option value="${id}" ${id === (task.calendarId || getDefaultCalendarId()) ? 'selected' : ''}>${esc(calendars[id].name)}${calendars[id].isDefault ? ' (default)' : ''}</option>`).join('')}</select>
     </div>
     <div class="ep-field">
-      <label>Colore barra <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">(override)</span></label>
+      <label>Bar color <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">${task.colorOverride ? '(overridden)' : '(automatic)'}</span></label>
       <div class="ep-color-row">
-        <span class="ep-color-auto" style="background:${task.bucket && BUCKET_COLORS[task.bucket] ? BUCKET_COLORS[task.bucket] : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)}" title="Colore automatico"></span>
+        <span class="ep-color-auto" style="background:${task.bucket && BUCKET_COLORS[task.bucket] ? BUCKET_COLORS[task.bucket] : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)}" title="Automatic color (from labels/bucket)"></span>
         <input type="color" id="ep-color" value="${task.colorOverride || task.color || DEFAULT_COLOR}" class="ep-color-picker ${task.colorOverride ? 'active' : ''}">
-        <button class="ep-color-reset" onclick="resetTaskColor()" title="Ripristina colore automatico">
+        <button class="ep-color-reset ${task.colorOverride ? '' : 'u-hidden'}" onclick="resetTaskColor()" title="Reset to automatic color">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 019-9 9.75 9.75 0 016.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 01-9 9 9.75 9.75 0 01-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+          Reset
         </button>
       </div>
     </div>
@@ -132,15 +177,25 @@ function openEditPanel(taskId) {
     });
   }
 
-  // Other fields: save on input (debounced) and change (immediate)
-  const otherFields = ['ep-name', 'ep-start', 'ep-finish', 'ep-bucket', 'ep-priority', 'ep-depends', 'ep-effort', 'ep-notes'];
-  otherFields.forEach(fid => {
+  // Text fields: save on input (debounced) and change (immediate)
+  const textFields = ['ep-name', 'ep-bucket', 'ep-priority', 'ep-depends', 'ep-effort', 'ep-notes'];
+  textFields.forEach(fid => {
     const el = document.getElementById(fid);
     if (!el) return;
     el.addEventListener('input', () => {
       clearTimeout(saveDebounce);
       saveDebounce = setTimeout(() => saveEditPanel(), DEBOUNCE_INPUT_MS);
     });
+    el.addEventListener('change', () => {
+      clearTimeout(saveDebounce);
+      saveEditPanel();
+    });
+  });
+  // Date fields: save ONLY on change (not input) to avoid saving
+  // intermediate values when user navigates months in the date picker
+  ['ep-start', 'ep-finish'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if (!el) return;
     el.addEventListener('change', () => {
       clearTimeout(saveDebounce);
       saveEditPanel();
@@ -153,16 +208,115 @@ function resetTaskColor() {
   if (!task) return;
   task.colorOverride = '';
   reassignColors();
+  // Update the color picker UI and sync the initial tracker
   const epColor = document.getElementById('ep-color');
-  if (epColor) epColor.value = task.color;
+  if (epColor) {
+    epColor.value = task.color || DEFAULT_COLOR;
+    epColor.classList.remove('active');
+    _epInitialAutoColor = (task.color || DEFAULT_COLOR).toLowerCase();
+  }
+  // Update the auto-color circle
+  const autoCircle = document.querySelector('.ep-color-auto');
+  if (autoCircle) autoCircle.style.background = task.color || DEFAULT_COLOR;
+  showToast('Color reset to automatic', 'success', 2000);
   renderAll();
   scheduleSave();
 }
+
+
+/* ---------- LEGEND ---------- */
+
+let legendOpen = false;
+
+function toggleLegend() {
+  legendOpen = !legendOpen;
+  const bar = document.getElementById('legend-bar');
+  const btn = document.getElementById('legend-toggle');
+  if (!bar || !btn) return;
+  if (legendOpen) {
+    renderLegend();
+    bar.classList.add('open');
+    btn.classList.add('active');
+  } else {
+    bar.classList.remove('open');
+    btn.classList.remove('active');
+  }
+}
+
+function renderLegend() {
+  const container = document.getElementById('legend-content');
+  if (!container) return;
+  let html = '';
+
+  // Labels
+  const labelEntries = Object.entries(LABEL_COLORS);
+  if (labelEntries.length > 0) {
+    html += '<div class="legend-section"><span class="legend-section-title">Labels:</span>';
+    labelEntries.forEach(([name, color]) => {
+      html += `<span class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(name)}</span>`;
+    });
+    html += '</div>';
+  }
+
+  // Buckets (only those actually used by tasks)
+  const usedBuckets = new Set();
+  allTasks.forEach(t => { if (t.bucket) usedBuckets.add(t.bucket); });
+  const bucketEntries = Object.entries(BUCKET_COLORS).filter(([name]) => usedBuckets.has(name));
+  if (bucketEntries.length > 0) {
+    html += '<div class="legend-section"><span class="legend-section-title">Buckets:</span>';
+    bucketEntries.forEach(([name, color]) => {
+      html += `<span class="legend-item"><span class="legend-swatch" style="background:${color}"></span>${esc(name)}</span>`;
+    });
+    html += '</div>';
+  }
+
+  // Priority / Milestones
+  html += '<div class="legend-section"><span class="legend-section-title">Milestones:</span>';
+  PRIORITY_OPTIONS.forEach(p => {
+    const color = PRIORITY_COLORS[p] || DEFAULT_COLOR;
+    html += `<span class="legend-item"><span class="legend-star">${starSVG(10, color)}</span>${esc(p)}</span>`;
+  });
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+// Auto-refresh legend when settings change
+const _origRenderSettingsBody = typeof renderSettingsBody === 'function' ? null : null;
+function refreshLegendIfOpen() {
+  if (legendOpen) renderLegend();
+}
+
 
 function toggleEpTag(el, label) {
   el.classList.toggle('selected');
   const c = LABEL_COLORS[label] || '#64748B';
   el.style.borderColor = el.classList.contains('selected') ? c : 'transparent';
+
+  // Immediately sync labels + colors to the task and re-render the bar
+  const task = allTasks.find(t => t.id === editPanelTaskId);
+  if (task) {
+    const tags = document.querySelectorAll('#ep-tags .ep-tag.selected');
+    task.labels = [...tags].map(t => t.dataset.label);
+    task.colorOverride = '';          // clear any stale override
+    reassignColors();
+
+    // Update the color picker to reflect the new auto-color
+    const epColor = document.getElementById('ep-color');
+    if (epColor) {
+      epColor.value = task.color || DEFAULT_COLOR;
+      _epInitialAutoColor = (task.color || DEFAULT_COLOR).toLowerCase();
+      epColor.classList.toggle('active', false);
+    }
+    // Update the auto-color circle and status text
+    const autoCircle = document.querySelector('.ep-color-auto');
+    if (autoCircle) autoCircle.style.background = task.color || DEFAULT_COLOR;
+    const statusSpan = document.querySelector('.ep-field label span');
+
+    if (currentTab === 'roadmap') renderAll();
+    if (typeof refreshLegendIfOpen === 'function') refreshLegendIfOpen();
+  }
+
   clearTimeout(saveDebounce);
   saveDebounce = setTimeout(() => saveEditPanel(), DEBOUNCE_INPUT_MS);
 }
@@ -205,6 +359,8 @@ function openDataLabelPicker(cell, taskId) {
         return `<span class="tag" style="background:${cc}22;color:${cc}">${esc(lb)}</span>`;
       }).join('');
       cell.innerHTML = tagsHtml + '<span class="tag-add-hint">+</span>';
+      if (currentTab === 'roadmap') renderAll();
+      if (typeof refreshLegendIfOpen === 'function') refreshLegendIfOpen();
       scheduleSave();
     };
     picker.appendChild(tag);
@@ -235,6 +391,8 @@ function saveEditPanel() {
   const fv = document.getElementById('ep-finish').value;
   let newStart = sv ? new Date(sv + 'T00:00:00') : null;
   let newFinish = fv ? new Date(fv + 'T00:00:00') : null;
+  if (newStart && isNaN(newStart.getTime())) newStart = null;
+  if (newFinish && isNaN(newFinish.getTime())) newFinish = null;
   if (newStart && newFinish && newStart > newFinish) {
     const startEl = document.getElementById('ep-start');
     const finishEl = document.getElementById('ep-finish');
@@ -276,7 +434,8 @@ function saveEditPanel() {
       if (epDurNum) epDurNum.value = parseInt(task.duration) || 0;
     }
   }
-  const manualPct = parseInt(document.getElementById('ep-pct').value) / 100;
+  const rawPct = parseInt(document.getElementById('ep-pct').value) || 0;
+  const manualPct = Math.max(0, Math.min(100, rawPct)) / 100;
   task.percentComplete = manualPct;
   // Only mark leaf tasks as manual progress; parent tasks should always auto-aggregate
   const isLeaf = !task.children || task.children.length === 0;
@@ -287,9 +446,19 @@ function saveEditPanel() {
   task.priority = document.getElementById('ep-priority').value;
   const newDepsVal = document.getElementById('ep-depends').value;
   if (newDepsVal && detectCircularDependency(task.id, newDepsVal)) {
-    alert('Circular dependency detected. This dependency would create a cycle.');
+    showToast('Circular dependency detected. This would create a cycle.', 'error');
     document.getElementById('ep-depends').value = task.dependsOn;
     return;
+  }
+  // Validate dependency references exist
+  if (newDepsVal) {
+    const deps = parseDependency(newDepsVal);
+    const taskByNum = new Map();
+    allTasks.forEach(t => taskByNum.set(t.taskNumber, t));
+    const invalid = deps.filter(d => !taskByNum.has(d.taskNum));
+    if (invalid.length > 0) {
+      showToast('Task #' + invalid[0].taskNum + ' not found. Check dependency references.', 'warn');
+    }
   }
   task.dependsOn = newDepsVal;
   task.effort = document.getElementById('ep-effort').value;
@@ -306,12 +475,19 @@ function saveEditPanel() {
     }
   }
 
-  // Color override - clear if it matches the new auto color
+  // Color override — only set if user actually interacted with the color picker
   const epColor = document.getElementById('ep-color');
   if (epColor) {
-    const autoColor = (task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
-      : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR);
-    task.colorOverride = (epColor.value !== autoColor) ? epColor.value : '';
+    const pickerVal = epColor.value.toLowerCase();
+    const newAutoColor = ((task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
+      : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)).toLowerCase();
+    // If picker still shows the auto-color from when the panel opened,
+    // or matches the new auto-color, it means user didn't manually pick — clear override
+    if (pickerVal === newAutoColor || pickerVal === _epInitialAutoColor) {
+      task.colorOverride = '';
+    } else {
+      task.colorOverride = epColor.value;
+    }
   }
 
   rebuildAfterChange();
@@ -373,35 +549,56 @@ function closeSettings() {
 function switchSettingsTab(tab) {
   currentSettingsTab = tab;
   document.querySelectorAll('#settings-modal .mtab').forEach(t => t.classList.toggle('active', t.dataset.stab === tab));
-  renderSettingsBody();
+  // Smooth crossfade between tabs
+  const body = DOM.settingsBody;
+  body.classList.add('switching');
+  setTimeout(() => {
+    renderSettingsBody();
+    body.classList.remove('switching');
+  }, 100);
 }
 
 function renderSettingsBody() {
   const body = DOM.settingsBody;
   let html = '';
   if (currentSettingsTab === 'labels') {
-    Object.entries(LABEL_COLORS).forEach(([name, color]) => {
+    const entries = Object.entries(LABEL_COLORS);
+    if (entries.length === 0) {
+      html += `<p class="settings-hint">No labels configured. Add labels or load defaults.</p>`;
+    }
+    entries.forEach(([name, color]) => {
       html += `<div class="setting-row">
         <input type="color" class="swatch" value="${color}" onchange="LABEL_COLORS['${esc(name)}']=this.value;renderAll();if(currentTab==='dati')renderDataTable();scheduleSave()">
         <input type="text" value="${esc(name)}" onchange="renameLabel('${esc(name)}',this.value)">
-        <button class="del-btn" onclick="deleteLabel('${esc(name)}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <button class="del-btn" onclick="deleteLabel('${esc(name)}')" title="Delete label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>`;
     });
-    html += `<button class="add-row-btn" onclick="addLabel()">+ Add label</button>`;
+    html += `<div class="settings-actions">
+      <button class="add-row-btn" onclick="addLabel()">+ Add label</button>
+      <button class="defaults-btn" onclick="saveGlobalDefaults();this.textContent='Saved!';setTimeout(()=>this.textContent='Save as defaults',1500)" title="Save current labels/buckets/priority as defaults for new projects">Save as defaults</button>
+      <button class="defaults-btn" onclick="resetToBuiltinDefaults()" title="Reset labels, buckets and priority to factory defaults">Reset to factory</button>
+    </div>`;
   } else if (currentSettingsTab === 'buckets') {
-    html += `<p class="settings-hint">Ogni bucket ha un colore che viene applicato alle barre dei task assegnati.</p>`;
+    html += `<p class="settings-hint">Each bucket has a color applied to the task bars assigned to it.</p>`;
     const buckets = getAllBuckets().filter(b => b);
+    if (buckets.length === 0) {
+      html += `<p class="settings-hint">No buckets configured. Add buckets or load defaults.</p>`;
+    }
     buckets.forEach(b => {
       const color = BUCKET_COLORS[b] || DEFAULT_COLOR;
       html += `<div class="setting-row">
         <input type="color" class="swatch" value="${color}" onchange="BUCKET_COLORS['${esc(b)}']=this.value;reassignColors();renderAll();if(currentTab==='dati')renderDataTable();scheduleSave()">
         <input type="text" value="${esc(b)}" onchange="renameBucketWithColor('${esc(b)}',this.value)">
-        <button class="del-btn" onclick="deleteBucket('${esc(b)}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        <button class="del-btn" onclick="deleteBucket('${esc(b)}')" title="Delete bucket"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>`;
     });
-    html += `<button class="add-row-btn" onclick="addBucket()">+ Add bucket</button>`;
+    html += `<div class="settings-actions">
+      <button class="add-row-btn" onclick="addBucket()">+ Add bucket</button>
+      <button class="defaults-btn" onclick="saveGlobalDefaults();this.textContent='Saved!';setTimeout(()=>this.textContent='Save as defaults',1500)">Save as defaults</button>
+      <button class="defaults-btn" onclick="resetToBuiltinDefaults()">Reset to factory</button>
+    </div>`;
   } else if (currentSettingsTab === 'priority') {
-    html += `<p class="settings-hint">I colori delle priorità influenzano le milestone (stelline) nella timeline.</p>`;
+    html += `<p class="settings-hint">Priority colors affect milestones (stars) in the timeline.</p>`;
     PRIORITY_OPTIONS.forEach(p => {
       const color = PRIORITY_COLORS[p] || DEFAULT_COLOR;
       html += `<div class="setting-row">
@@ -409,10 +606,15 @@ function renderSettingsBody() {
         <span class="setting-label">${esc(p)}</span>
       </div>`;
     });
+    html += `<div class="settings-actions">
+      <button class="defaults-btn" onclick="saveGlobalDefaults();this.textContent='Saved!';setTimeout(()=>this.textContent='Save as defaults',1500)">Save as defaults</button>
+      <button class="defaults-btn" onclick="resetToBuiltinDefaults()">Reset to factory</button>
+    </div>`;
   } else if (currentSettingsTab === 'calendar') {
     html = renderCalendarSettingsHTML();
   }
   body.innerHTML = html;
+  refreshLegendIfOpen();
 }
 
 function renameLabel(oldName, newName) {
@@ -431,8 +633,8 @@ function deleteLabel(name) {
   renderSettingsBody(); scheduleSave();
 }
 
-function addLabel() {
-  const name = prompt('New label name:');
+async function addLabel() {
+  const name = await showPrompt('Enter a name for the new label:', { title: 'New Label', placeholder: 'e.g. Business, IT, Testing...' });
   if (!name || !name.trim()) return;
   LABEL_COLORS[name.trim()] = '#64748B';
   renderSettingsBody(); scheduleSave();
@@ -463,8 +665,8 @@ function deleteBucket(name) {
   renderSettingsBody(); scheduleSave();
 }
 
-function addBucket() {
-  const name = prompt('Nome nuovo bucket:');
+async function addBucket() {
+  const name = await showPrompt('Enter a name for the new bucket:', { title: 'New Bucket', placeholder: 'e.g. Team A, Phase 1...' });
   if (!name || !name.trim()) return;
   customBuckets.add(name.trim());
   // Assign a random nice color
@@ -847,9 +1049,31 @@ function getScopeDateRange(nodes) {
   }
   walk(nodes);
   if (dMin === Infinity) return null;
-  const mn = new Date(dMin - 7 * MS_PER_DAY);
-  const mx = new Date(dMax + 7 * MS_PER_DAY);
-  mn.setDate(1);
+  return _smartDatePadding(dMin, dMax);
+}
+
+/** Zoom-aware date padding — avoid showing empty past months at higher zoom levels */
+function _smartDatePadding(dMin, dMax) {
+  const mn = new Date(dMin);
+  const mx = new Date(dMax);
+
+  if (currentZoom === 'day') {
+    // Day view: minimal padding — 2 days before, 3 days after
+    mn.setTime(mn.getTime() - 2 * MS_PER_DAY);
+    mx.setTime(mx.getTime() + 3 * MS_PER_DAY);
+  } else if (currentZoom === 'week') {
+    // Week view: snap to the Monday of the week the first task starts in
+    const dow = mn.getDay() || 7;           // 1=Mon..7=Sun
+    mn.setDate(mn.getDate() - dow + 1);     // snap to Monday of that week
+    // Add 1 week after the last task
+    const dowEnd = mx.getDay() || 7;
+    mx.setDate(mx.getDate() + (7 - dowEnd) + 7);  // snap to next Sunday + 1 week
+  } else {
+    // Month view: start from the 1st of the same month as earliest task
+    mn.setDate(1);
+    // End at last day of the month after the latest task
+    mx.setTime(mx.getTime() + 14 * MS_PER_DAY);
+  }
   return { min: mn, max: mx };
 }
 
@@ -876,10 +1100,10 @@ function toggleArrows() {
   if (btn && lbl) {
     if (showArrows) {
       btn.classList.remove('dim');
-      lbl.innerText = 'Hide Dependencies';
+      lbl.innerText = 'Deps';
     } else {
       btn.classList.add('dim');
-      lbl.innerText = 'Show Dependencies';
+      lbl.innerText = 'Deps';
     }
   }
   renderAll();
@@ -949,7 +1173,7 @@ function toggleExpandAll() {
     // Collapse: add all parents to collapsedSet (needed when visibleDepth=0 allows all by default)
     allTasks.forEach(t => { if (t.children.length > 0) getState().collapsedSet.add(t.outline); });
   }
-  DOM.expandLabel.textContent = getState().allExpanded ? 'Collapse all' : 'Expand all';
+  DOM.expandLabel.textContent = getState().allExpanded ? 'Collapse' : 'Expand';
   renderAll();
   if (currentTab === 'dati') renderDataTable();
 }
@@ -959,6 +1183,19 @@ function setZoom(level) {
   document.querySelectorAll('#zoom-month,#zoom-week,#zoom-day').forEach(b => b.classList.remove('active'));
   document.getElementById('zoom-' + level).classList.add('active');
   renderAll();
+}
+
+function toggleWorkingDays() {
+  workingDaysMode = !workingDaysMode;
+  const btn = document.getElementById('working-days-btn');
+  if (btn) btn.classList.toggle('active', workingDaysMode);
+  // Recalc all durations
+  allTasks.forEach(t => recalcDuration(t));
+  rebuildAfterChange();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+  showToast(workingDaysMode ? 'Working days mode (Mon-Fri)' : 'Calendar days mode (all days)', 'info', 2000);
 }
 
 function setDepth(val) {
@@ -1055,20 +1292,24 @@ function switchTab(tab) {
     const ds = DOM.depthSelect;
     if (ds) ds.value = newState.visibleDepth;
     const elbl = DOM.expandLabel;
-    if (elbl) elbl.textContent = newState.allExpanded ? 'Collapse all' : 'Expand all';
+    if (elbl) elbl.textContent = newState.allExpanded ? 'Collapse' : 'Expand';
   }
 
   document.querySelectorAll('.tab-bar .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   const gw = DOM.ganttWrapper;
   const dw = DOM.datiWrapper;
   if (tab === 'roadmap') {
+    gw.style.opacity = '0';
     gw.classList.add('active'); gw.classList.remove('hidden');
     dw.classList.remove('active');
     renderAll();
+    requestAnimationFrame(() => { gw.style.opacity = '1'; });
   } else {
+    dw.style.opacity = '0';
     gw.classList.remove('active'); gw.classList.add('hidden');
     dw.classList.add('active');
     renderDataTable();
+    requestAnimationFrame(() => { dw.style.opacity = '1'; });
   }
   
   const editBtn = document.getElementById('data-edit-btn');
@@ -1138,8 +1379,9 @@ function applyTableLayoutMode() {
 
   const visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
 
-  // Check if fit is even possible
-  const minNeeded = visCols.length * MIN_COLUMN_WIDTH + (isDataEditMode ? 28 : 0);
+  // Check if fit is even possible — sum per-column minimums
+  let minNeeded = isDataEditMode ? 28 : 0;
+  visCols.forEach(col => { minNeeded += (MIN_COL_WIDTHS && MIN_COL_WIDTHS[col.id]) || MIN_COLUMN_WIDTH; });
   const available = container.clientWidth || window.innerWidth;
   const fitPossible = minNeeded <= available;
 
@@ -1269,27 +1511,43 @@ function addNewTask() {
   scheduleSave();
 }
 
+// Template dependency references use taskNumber (sequential: 1,2,3,...).
+// Only leaf tasks have deps; parent dates are auto-aggregated from children.
+// Task numbering: parent=N, then children N+1, N+2, etc.
+//
+// Software: 1=Planning, 2=Req, 3=Design, 4=Dev, 5=Backend, 6=Frontend, 7=Integration,
+//           8=Testing, 9=Unit, 10=IntTest, 11=UAT, 12=Deploy, 13=Staging, 14=Release
+// Marketing: 1=Strategy, 2=Research, 3=Brief, 4=Content, 5=Copy, 6=Visual, 7=Review,
+//            8=Launch, 9=Setup, 10=Launch, 11=Monitor
+// Event: 1=Pre-plan, 2=Objectives, 3=Venue, 4=Vendors, 5=Prep, 6=Invitations,
+//        7=Catering, 8=Program, 9=Execution, 10=Setup, 11=EventDay, 12=Teardown
+// SAP: 1=Discover, 2=BPA, 3=Landscape, 4=Gap, 5=Prepare, 6=Onboard, 7=EnvSetup,
+//      8=DataMigStrat, 9=Cutover, 10=Explore, 11=Workshops, 12=ConfigDoc, 13=DevSpecs,
+//      14=Realize, 15=SysConfig, 16=CustomDev, 17=DataMigDev, 18=IntTest, 19=UAT,
+//      20=Deploy, 21=Training, 22=DataMigExec, 23=GoLive, 24=Hypercare,
+//      25=Run, 26=Handover, 27=Monitoring, 28=Closure
+
 const PROJECT_TEMPLATES = {
   software: {
     name: 'Software Development',
     tasks: [
       { outline: '1', name: 'Planning', days: 5, children: [
         { outline: '1.1', name: 'Requirements gathering', days: 3 },
-        { outline: '1.2', name: 'Technical design', days: 2, dep: '1' }
+        { outline: '1.2', name: 'Technical design', days: 2, dep: '2' }
       ]},
-      { outline: '2', name: 'Development', days: 15, dep: '1', children: [
-        { outline: '2.1', name: 'Backend development', days: 10 },
-        { outline: '2.2', name: 'Frontend development', days: 10 },
-        { outline: '2.3', name: 'Integration', days: 5, dep: '4,5' }
+      { outline: '2', name: 'Development', days: 15, children: [
+        { outline: '2.1', name: 'Backend development', days: 10, dep: '3' },
+        { outline: '2.2', name: 'Frontend development', days: 10, dep: '3' },
+        { outline: '2.3', name: 'Integration', days: 5, dep: '5,6' }
       ]},
-      { outline: '3', name: 'Testing', days: 7, dep: '2', children: [
-        { outline: '3.1', name: 'Unit testing', days: 3 },
-        { outline: '3.2', name: 'Integration testing', days: 2, dep: '8' },
-        { outline: '3.3', name: 'User acceptance testing', days: 2, dep: '9' }
+      { outline: '3', name: 'Testing', days: 7, children: [
+        { outline: '3.1', name: 'Unit testing', days: 3, dep: '7' },
+        { outline: '3.2', name: 'Integration testing', days: 2, dep: '9' },
+        { outline: '3.3', name: 'User acceptance testing', days: 2, dep: '10' }
       ]},
-      { outline: '4', name: 'Deployment', days: 2, dep: '3', children: [
-        { outline: '4.1', name: 'Staging deployment', days: 1 },
-        { outline: '4.2', name: 'Production release', days: 0, dep: '12' }
+      { outline: '4', name: 'Deployment', days: 2, children: [
+        { outline: '4.1', name: 'Staging deployment', days: 1, dep: '11' },
+        { outline: '4.2', name: 'Production release', days: 0, dep: '13' }
       ]}
     ]
   },
@@ -1298,17 +1556,17 @@ const PROJECT_TEMPLATES = {
     tasks: [
       { outline: '1', name: 'Strategy', days: 5, children: [
         { outline: '1.1', name: 'Market research', days: 3 },
-        { outline: '1.2', name: 'Campaign brief', days: 2, dep: '1' }
+        { outline: '1.2', name: 'Campaign brief', days: 2, dep: '2' }
       ]},
-      { outline: '2', name: 'Content Creation', days: 10, dep: '1', children: [
-        { outline: '2.1', name: 'Copywriting', days: 5 },
-        { outline: '2.2', name: 'Visual design', days: 7 },
-        { outline: '2.3', name: 'Review & approval', days: 3, dep: '4,5' }
+      { outline: '2', name: 'Content Creation', days: 10, children: [
+        { outline: '2.1', name: 'Copywriting', days: 5, dep: '3' },
+        { outline: '2.2', name: 'Visual design', days: 7, dep: '3' },
+        { outline: '2.3', name: 'Review & approval', days: 3, dep: '5,6' }
       ]},
-      { outline: '3', name: 'Launch', days: 5, dep: '2', children: [
-        { outline: '3.1', name: 'Channel setup', days: 2 },
-        { outline: '3.2', name: 'Campaign launch', days: 0, dep: '8' },
-        { outline: '3.3', name: 'Monitor & optimize', days: 5, dep: '9' }
+      { outline: '3', name: 'Launch', days: 5, children: [
+        { outline: '3.1', name: 'Channel setup', days: 2, dep: '7' },
+        { outline: '3.2', name: 'Campaign launch', days: 0, dep: '9' },
+        { outline: '3.3', name: 'Monitor & optimize', days: 5, dep: '10' }
       ]}
     ]
   },
@@ -1317,18 +1575,57 @@ const PROJECT_TEMPLATES = {
     tasks: [
       { outline: '1', name: 'Pre-planning', days: 10, children: [
         { outline: '1.1', name: 'Define objectives & budget', days: 3 },
-        { outline: '1.2', name: 'Venue selection', days: 5, dep: '1' },
-        { outline: '1.3', name: 'Vendor contracts', days: 5, dep: '2' }
+        { outline: '1.2', name: 'Venue selection', days: 5, dep: '2' },
+        { outline: '1.3', name: 'Vendor contracts', days: 5, dep: '3' }
       ]},
-      { outline: '2', name: 'Preparation', days: 15, dep: '1', children: [
-        { outline: '2.1', name: 'Invitations & registration', days: 5 },
-        { outline: '2.2', name: 'Catering & logistics', days: 7 },
-        { outline: '2.3', name: 'Program & speakers', days: 10 }
+      { outline: '2', name: 'Preparation', days: 15, children: [
+        { outline: '2.1', name: 'Invitations & registration', days: 5, dep: '4' },
+        { outline: '2.2', name: 'Catering & logistics', days: 7, dep: '4' },
+        { outline: '2.3', name: 'Program & speakers', days: 10, dep: '4' }
       ]},
-      { outline: '3', name: 'Execution', days: 3, dep: '2', children: [
-        { outline: '3.1', name: 'Setup', days: 1 },
-        { outline: '3.2', name: 'Event day', days: 1, dep: '8' },
-        { outline: '3.3', name: 'Teardown & follow-up', days: 1, dep: '9' }
+      { outline: '3', name: 'Execution', days: 3, children: [
+        { outline: '3.1', name: 'Setup', days: 1, dep: '6,7,8' },
+        { outline: '3.2', name: 'Event day', days: 1, dep: '10' },
+        { outline: '3.3', name: 'Teardown & follow-up', days: 1, dep: '11' }
+      ]}
+    ]
+  },
+  sap: {
+    name: 'SAP Implementation',
+    tasks: [
+      { outline: '1', name: 'Discover', days: 15, children: [
+        { outline: '1.1', name: 'Business process analysis', days: 5 },
+        { outline: '1.2', name: 'System landscape review', days: 5, dep: '2' },
+        { outline: '1.3', name: 'Gap analysis & requirements', days: 5, dep: '3' }
+      ]},
+      { outline: '2', name: 'Prepare', days: 15, children: [
+        { outline: '2.1', name: 'Project team onboarding', days: 3, dep: '4' },
+        { outline: '2.2', name: 'Environment setup & provisioning', days: 5, dep: '6' },
+        { outline: '2.3', name: 'Data migration strategy', days: 5, dep: '6' },
+        { outline: '2.4', name: 'Cutover plan', days: 2, dep: '7,8' }
+      ]},
+      { outline: '3', name: 'Explore', days: 20, children: [
+        { outline: '3.1', name: 'Fit-to-standard workshops', days: 10, dep: '9' },
+        { outline: '3.2', name: 'Configuration documentation', days: 5, dep: '11' },
+        { outline: '3.3', name: 'Custom development specs', days: 5, dep: '12' }
+      ]},
+      { outline: '4', name: 'Realize', days: 30, children: [
+        { outline: '4.1', name: 'System configuration', days: 10, dep: '13' },
+        { outline: '4.2', name: 'Custom development (ABAP/Fiori)', days: 15, dep: '13' },
+        { outline: '4.3', name: 'Data migration development', days: 10, dep: '15' },
+        { outline: '4.4', name: 'Integration testing', days: 5, dep: '16,17' },
+        { outline: '4.5', name: 'User acceptance testing', days: 5, dep: '18' }
+      ]},
+      { outline: '5', name: 'Deploy', days: 10, children: [
+        { outline: '5.1', name: 'End-user training', days: 5, dep: '19' },
+        { outline: '5.2', name: 'Data migration execution', days: 3, dep: '21' },
+        { outline: '5.3', name: 'Go-live', days: 0, dep: '22' },
+        { outline: '5.4', name: 'Hypercare support', days: 5, dep: '23' }
+      ]},
+      { outline: '6', name: 'Run', days: 10, children: [
+        { outline: '6.1', name: 'Operational handover', days: 3, dep: '24' },
+        { outline: '6.2', name: 'Performance monitoring', days: 5, dep: '26' },
+        { outline: '6.3', name: 'Project closure', days: 0, dep: '27' }
       ]}
     ]
   }
@@ -1370,6 +1667,144 @@ function loadTemplate(templateKey) {
   renderAll();
   if (currentTab === 'dati') renderDataTable();
   scheduleSave();
+}
+
+/* ---------- CUSTOM TEMPLATES ---------- */
+
+function getCustomTemplates() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_TEMPLATES);
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+
+function saveCustomTemplates(templates) {
+  try {
+    localStorage.setItem(STORAGE_KEY_TEMPLATES, JSON.stringify(templates));
+  } catch(e) { showToast('Could not save templates - storage may be full.', 'warn'); }
+}
+
+async function saveAsTemplate() {
+  if (allTasks.length === 0) {
+    showToast('No tasks to save as template.', 'warn');
+    return;
+  }
+  const defaultName = projects[currentProjectId]?.name || 'My Template';
+  const name = await showPrompt('Enter a name for this template:', { title: 'Save as Template', defaultValue: defaultName });
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  const templates = getCustomTemplates();
+  // Check for duplicate name
+  if (templates[trimmed]) {
+    const overwrite = await showConfirm('A template named "' + trimmed + '" already exists. Overwrite it?', { title: 'Template Exists', okLabel: 'Overwrite', danger: true });
+    if (!overwrite) return;
+  }
+  // Serialize current tasks as template
+  templates[trimmed] = {
+    name: trimmed,
+    tasks: serializeTasks(),
+    createdAt: new Date().toISOString()
+  };
+  saveCustomTemplates(templates);
+  showToast('Template "' + trimmed + '" saved successfully.', 'success');
+}
+
+function loadCustomTemplate(name) {
+  const templates = getCustomTemplates();
+  const tmpl = templates[name];
+  if (!tmpl || !tmpl.tasks) return;
+  snapshotUndo();
+  allTasks = deserializeTasks(tmpl.tasks);
+  // Re-assign IDs to avoid conflicts
+  allTasks.forEach((t, i) => { t.id = i + 1; t.taskNumber = i + 1; });
+  buildTree();
+  aggregateParentProgress();
+  reassignColors();
+  allTasks.forEach(t => { if (t.dependsOn) propagateDependencies(t); });
+  rebuildAfterChange();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+async function deleteCustomTemplate(name) {
+  const ok = await showConfirm('Delete template "' + name + '"?', { title: 'Delete Template', danger: true, okLabel: 'Delete' });
+  if (!ok) return;
+  const templates = getCustomTemplates();
+  delete templates[name];
+  saveCustomTemplates(templates);
+  showToast('Template deleted.', 'success');
+  // Refresh the modal if open
+  const modal = document.getElementById('template-modal');
+  if (modal) showTemplateModal();
+}
+
+function showTemplateModal() {
+  // Remove existing modal if any
+  const existing = document.getElementById('template-modal-overlay');
+  if (existing) existing.remove();
+
+  const builtIn = Object.entries(PROJECT_TEMPLATES);
+  const custom = Object.entries(getCustomTemplates());
+
+  let html = '<div id="template-modal-overlay" class="dialog-overlay show" onclick="if(event.target===this)this.remove()">';
+  html += '<div class="dialog-box" style="max-width:520px;width:90%">';
+  html += '<div class="dialog-title" style="display:flex;align-items:center;justify-content:space-between">';
+  html += '<span>Choose a Template</span>';
+  html += '<button onclick="this.closest(\'#template-modal-overlay\').remove()" style="background:none;border:none;cursor:pointer;color:var(--grey-txt);font-size:1.2rem">&times;</button>';
+  html += '</div>';
+
+  // Built-in templates
+  html += '<div style="margin:.8rem 0 .4rem;font-size:.75rem;font-weight:600;text-transform:uppercase;color:var(--grey-txt);letter-spacing:.5px">Built-in</div>';
+  html += '<div class="template-modal-list">';
+  for (const [key, tmpl] of builtIn) {
+    const taskCount = _countTemplateTasks(tmpl.tasks);
+    html += '<div class="template-modal-item" onclick="loadTemplate(\'' + key + '\');document.getElementById(\'template-modal-overlay\').remove()">';
+    html += '<div class="template-modal-name">' + _escDialog(tmpl.name) + '</div>';
+    html += '<div class="template-modal-meta">' + taskCount + ' tasks</div>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Custom templates
+  html += '<div style="margin:1rem 0 .4rem;font-size:.75rem;font-weight:600;text-transform:uppercase;color:var(--grey-txt);letter-spacing:.5px;display:flex;align-items:center;justify-content:space-between">Custom';
+  html += '<button onclick="document.getElementById(\'template-modal-overlay\').remove();saveAsTemplate()" style="background:var(--blue);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:.75rem;cursor:pointer;font-family:inherit">+ Save Current</button>';
+  html += '</div>';
+  html += '<div class="template-modal-list">';
+  if (custom.length === 0) {
+    html += '<div style="padding:.8rem;color:var(--grey-txt);font-size:.82rem;text-align:center">No custom templates yet. Save your current project as a template to reuse it later.</div>';
+  }
+  for (const [name, tmpl] of custom) {
+    const taskCount = tmpl.tasks ? tmpl.tasks.length : 0;
+    const dateStr = tmpl.createdAt ? new Date(tmpl.createdAt).toLocaleDateString() : '';
+    html += '<div class="template-modal-item">';
+    html += '<div style="flex:1;cursor:pointer" onclick="loadCustomTemplate(\'' + _escDialog(name).replace(/'/g, "\\'") + '\');document.getElementById(\'template-modal-overlay\').remove()">';
+    html += '<div class="template-modal-name">' + _escDialog(name) + '</div>';
+    html += '<div class="template-modal-meta">' + taskCount + ' tasks' + (dateStr ? ' -- ' + dateStr : '') + '</div>';
+    html += '</div>';
+    html += '<button class="template-modal-delete" onclick="event.stopPropagation();deleteCustomTemplate(\'' + _escDialog(name).replace(/'/g, "\\'") + '\')" title="Delete template">';
+    html += '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M5 6v14a2 2 0 002 2h10a2 2 0 002-2V6"/></svg>';
+    html += '</button>';
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // Dialog buttons
+  html += '<div class="dialog-buttons" style="margin-top:1rem">';
+  html += '<button class="dialog-btn dialog-btn-cancel" onclick="this.closest(\'#template-modal-overlay\').remove()">Cancel</button>';
+  html += '</div>';
+  html += '</div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function _countTemplateTasks(tasks) {
+  let count = 0;
+  for (const t of tasks) {
+    count++;
+    if (t.children) count += _countTemplateTasks(t.children);
+  }
+  return count;
 }
 
 /**
@@ -1795,9 +2230,9 @@ function showAutoLinkResult(title, msg) {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
-function deleteSelectedTasks() {
+async function deleteSelectedTasks() {
   if (!selectedRows.size) return;
-  if (!confirm(`Delete ${selectedRows.size} selected tasks?`)) return;
+  if (!await showConfirm(`Delete ${selectedRows.size} selected task(s)?`, { title: 'Delete Tasks', danger: true, okLabel: 'Delete' })) return;
   snapshotUndo();
   const toRemove = new Set(selectedRows);
   const selectedOutlines = allTasks.filter(t => selectedRows.has(t.id)).map(t => t.outline);
@@ -1814,8 +2249,8 @@ function deleteSelectedTasks() {
   scheduleSave();
 }
 
-function deleteTask(id) {
-  if (!confirm('Delete this task?')) return;
+async function deleteTask(id) {
+  if (!await showConfirm('Delete this task and all its sub-tasks?', { title: 'Delete Task', danger: true, okLabel: 'Delete' })) return;
   snapshotUndo();
   const task = allTasks.find(t => t.id === id);
   if (!task) return;
@@ -1857,15 +2292,15 @@ async function shareProject() {
     bytes.forEach(b => binary += String.fromCharCode(b));
     const b64 = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     if (b64.length > 32000) {
-      alert('Project is too large to share via URL. Use Excel export instead.');
+      showToast('Project is too large to share via URL. Use Excel export instead.', 'warn');
       return;
     }
     const url = location.origin + location.pathname + '#share=' + b64;
     await navigator.clipboard.writeText(url);
-    alert('Link copied to clipboard!\n\nShare it to let others view this project.');
+    showToast('Link copied to clipboard! Share it to let others view this project.', 'success', 5000);
   } catch (e) {
     console.error('Share failed:', e);
-    alert('Share error: ' + e.message);
+    showToast('Share error: ' + e.message, 'error');
   }
 }
 
@@ -1893,7 +2328,7 @@ async function loadFromURL() {
     return true;
   } catch (e) {
     console.error('Failed to load shared project:', e);
-    alert('Failed to load shared project. The link may be invalid or corrupted.');
+    showToast('Failed to load shared project. The link may be invalid or corrupted.', 'error', 6000);
     return false;
   }
 }
@@ -1943,11 +2378,11 @@ function exportCopyPNG() {
     backgroundColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
   }).then(canvas => {
     canvas.toBlob(blob => {
-      if (!blob) { alert('Failed to create image'); return; }
+      if (!blob) { showToast('Failed to create image', 'error'); return; }
       navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(() => {
-        updateSaveIndicator('PNG copied to clipboard');
+        showToast('PNG copied to clipboard', 'success');
       }).catch(() => {
-        alert('Could not copy to clipboard. Try downloading instead.');
+        showToast('Could not copy to clipboard. Try downloading instead.', 'warn');
       });
     }, 'image/png');
   });
@@ -1985,11 +2420,21 @@ function startColResize(e, colId) {
   }
 
   const table = document.getElementById('data-table');
+
+  // Feature 4: Create resize guide line
+  const guide = document.createElement('div');
+  guide.className = 'col-resize-guide';
+  guide.style.left = e.clientX + 'px';
+  document.body.appendChild(guide);
+
   function onMove(ev) {
     const diff = ev.clientX - _resizeStartX;
-    const newW = Math.max(40, _resizeStartW + diff);
+    const colMinW = (typeof MIN_COL_WIDTHS !== 'undefined' && MIN_COL_WIDTHS[_resizeCol]) || MIN_COLUMN_WIDTH;
+    const newW = Math.max(colMinW, _resizeStartW + diff);
     columnWidths[_resizeCol] = newW;
     th.style.width = newW + 'px';
+    // Update guide line position
+    guide.style.left = ev.clientX + 'px';
     // Update table total width so it can grow beyond container
     if (table && tableScrollMode) {
       applyTableLayoutMode();
@@ -2000,6 +2445,8 @@ function startColResize(e, colId) {
     document.removeEventListener('mouseup', onUp);
     document.body.classList.remove('col-resizing');
     document.querySelectorAll('.col-resize-handle.active').forEach(h => h.classList.remove('active'));
+    // Remove guide line
+    guide.remove();
     _resizeCol = null;
     // Suppress the click event that fires right after mouseup on the <th>
     _colResizeJustFinished = true;
@@ -2167,51 +2614,39 @@ function initDragDrop() {
       let insertIdx = targetTask ? allTasks.findIndex(t => t.id === targetTask.id) : allTasks.length;
       if (insertIdx < 0) insertIdx = allTasks.length;
 
-      // Determine new outline based on neighbors
+      // Determine the correct depth for the dragged task at its new position
       const aboveTask = insertIdx > 0 ? allTasks[insertIdx - 1] : null;
       const belowTask = insertIdx < allTasks.length ? allTasks[insertIdx] : null;
 
-      let newOutline;
+      let targetDepth;
       if (indentDelta > 0 && aboveTask) {
         // Indent: become child of above task
-        const parentOutline = aboveTask.outline;
-        const existingChildren = allTasks.filter(t => t.outline.startsWith(parentOutline + '.') && t.depth === aboveTask.depth + 1);
-        const nextNum = existingChildren.length > 0 ? Math.max(...existingChildren.map(c => parseInt(c.outline.split('.').pop()))) + 1 : 1;
-        newOutline = parentOutline + '.' + nextNum;
-      } else if (indentDelta < 0 && draggedTask.parent) {
-        // Outdent: become sibling of parent
-        const grandParent = draggedTask.parent.parent;
-        const parentOutline = grandParent ? grandParent.outline : '';
-        const siblings = allTasks.filter(t => {
-          if (parentOutline) return t.outline.startsWith(parentOutline + '.') && t.depth === grandParent.depth + 1;
-          return t.depth === 1;
-        });
-        const maxNum = siblings.length > 0 ? Math.max(...siblings.map(s => parseInt(s.outline.split('.').pop()))) + 1 : 1;
-        newOutline = parentOutline ? parentOutline + '.' + maxNum : String(maxNum);
+        targetDepth = aboveTask.depth + 1;
+      } else if (indentDelta < 0) {
+        // Outdent: go up one level, but not above depth 1
+        targetDepth = Math.max(1, draggedTask.depth - 1);
       } else {
-        // Same level: sibling of target
+        // Same level move: match the depth of the context
         if (belowTask) {
-          newOutline = belowTask.outline;
+          targetDepth = belowTask.depth;
         } else if (aboveTask) {
-          const parts = aboveTask.outline.split('.');
-          parts[parts.length - 1] = String(parseInt(parts[parts.length - 1]) + 1);
-          newOutline = parts.join('.');
+          targetDepth = aboveTask.depth;
         } else {
-          newOutline = '1';
+          targetDepth = 1;
         }
       }
 
-      // Update outlines of moved tasks
-      const oldOutline = draggedTask.outline;
+      // Adjust depths of moved tasks relative to the dragged task's new depth
+      const depthShift = targetDepth - draggedTask.depth;
       toMove.forEach(t => {
-        t.outline = t.outline.replace(oldOutline, newOutline);
-        t.depth = t.outline.split('.').length;
+        t.depth = t.depth + depthShift;
       });
 
       // Insert at new position
       allTasks.splice(insertIdx, 0, ...toMove);
 
-      // Renumber everything
+      // Recalculate all outlines from depths, then renumber task numbers
+      recalculateAllOutlines();
       renumberAllTaskNumbers();
       rebuildAfterChange();
       renderAll();
@@ -2225,50 +2660,44 @@ function initDragDrop() {
 }
 
 function applyIndentOutdent(task, delta) {
+  const idx = allTasks.indexOf(task);
+
   if (delta > 0) {
-    // Indent: find previous sibling and become its child
-    const idx = allTasks.indexOf(task);
+    // Indent: become child of previous task
     if (idx <= 0) return;
     const prev = allTasks[idx - 1];
     if (prev.depth < task.depth) return; // already a child
-    const newParentOutline = prev.outline;
-    const existingChildren = allTasks.filter(t => t.outline.startsWith(newParentOutline + '.') && t.outline.split('.').length === prev.depth + 1);
-    const nextNum = existingChildren.length > 0 ? Math.max(...existingChildren.map(c => parseInt(c.outline.split('.').pop()))) + 1 : 1;
-    const oldOutline = task.outline;
-    const newOutline = newParentOutline + '.' + nextNum;
 
-    // Update task and children
-    allTasks.forEach(t => {
-      if (t.outline === oldOutline || t.outline.startsWith(oldOutline + '.')) {
-        t.outline = t.outline.replace(oldOutline, newOutline);
-        t.depth = t.outline.split('.').length;
+    // Shift depth of task and its children
+    const oldDepth = task.depth;
+    const newDepth = prev.depth + 1;
+    const depthShift = newDepth - oldDepth;
+
+    // Collect task + children (contiguous tasks with outline starting with task.outline + '.')
+    for (let i = idx; i < allTasks.length; i++) {
+      const t = allTasks[i];
+      if (i === idx || t.outline.startsWith(task.outline + '.')) {
+        t.depth += depthShift;
+      } else {
+        break;
       }
-    });
+    }
   } else if (delta < 0) {
-    // Outdent
+    // Outdent: go up one level
     if (task.depth <= 1) return;
-    const parts = task.outline.split('.');
-    const parentOutline = parts.slice(0, -1).join('.');
-    const grandParentOutline = parts.slice(0, -2).join('.');
-    const oldOutline = task.outline;
 
-    // New outline: next sibling of parent
-    const parentSiblings = allTasks.filter(t => {
-      const tParts = t.outline.split('.');
-      if (grandParentOutline) return t.outline.startsWith(grandParentOutline + '.') && tParts.length === parts.length - 1;
-      return tParts.length === 1;
-    });
-    const maxNum = parentSiblings.length > 0 ? Math.max(...parentSiblings.map(s => parseInt(s.outline.split('.').pop()))) + 1 : 1;
-    const newOutline = grandParentOutline ? grandParentOutline + '.' + maxNum : String(maxNum);
-
-    allTasks.forEach(t => {
-      if (t.outline === oldOutline || t.outline.startsWith(oldOutline + '.')) {
-        t.outline = t.outline.replace(oldOutline, newOutline);
-        t.depth = t.outline.split('.').length;
+    const depthShift = -1;
+    for (let i = idx; i < allTasks.length; i++) {
+      const t = allTasks[i];
+      if (i === idx || t.outline.startsWith(task.outline + '.')) {
+        t.depth += depthShift;
+      } else {
+        break;
       }
-    });
+    }
   }
 
+  recalculateAllOutlines();
   renumberAllTaskNumbers();
   rebuildAfterChange();
   renderAll();
@@ -2371,15 +2800,18 @@ function showContextMenu(e, taskId) {
   // Close on outside click / Escape
   setTimeout(() => {
     document.addEventListener('click', closeContextMenu);
-    document.addEventListener('keydown', function escClose(ev) {
-      if (ev.key === 'Escape') { closeContextMenu(); document.removeEventListener('keydown', escClose); }
-    });
+    document.addEventListener('keydown', _ctxMenuEscHandler);
   }, 0);
+}
+
+function _ctxMenuEscHandler(ev) {
+  if (ev.key === 'Escape') closeContextMenu();
 }
 
 function closeContextMenu() {
   if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
   document.removeEventListener('click', closeContextMenu);
+  document.removeEventListener('keydown', _ctxMenuEscHandler);
 }
 
 function duplicateTask(taskId) {
@@ -2620,12 +3052,14 @@ function initKeyboardNav() {
           task.name = trimmed || DEFAULT_TASK_NAME;
         } else if (field === 'start') {
           const newStart = val ? new Date(val + 'T00:00:00') : null;
+          if (newStart && isNaN(newStart.getTime())) { td.innerHTML = origValue; td.classList.remove('cell-editing'); return; }
           if (newStart && task.finish && newStart > task.finish) task.finish = new Date(newStart);
           task.start = newStart;
           recalcDuration(task);
           propagateDependencies(task);
         } else if (field === 'finish') {
           const newFinish = val ? new Date(val + 'T00:00:00') : null;
+          if (newFinish && isNaN(newFinish.getTime())) { td.innerHTML = origValue; td.classList.remove('cell-editing'); return; }
           if (newFinish && task.start && newFinish < task.start) task.start = new Date(newFinish);
           task.finish = newFinish;
           recalcDuration(task);
@@ -2638,10 +3072,20 @@ function initKeyboardNav() {
           if (isLeaf) task.manualProgress = true;
         } else if (field === 'dependsOn') {
           if (val && detectCircularDependency(task.id, val)) {
-            alert('Circular dependency detected.');
+            showToast('Circular dependency detected.', 'error');
             td.innerHTML = origValue;
             td.classList.remove('cell-editing');
             return;
+          }
+          // Validate dependency references exist
+          if (val) {
+            const deps = parseDependency(val);
+            const taskByNum = new Map();
+            allTasks.forEach(t => taskByNum.set(t.taskNumber, t));
+            const invalid = deps.filter(d => !taskByNum.has(d.taskNum));
+            if (invalid.length > 0) {
+              showToast('Task #' + invalid[0].taskNum + ' not found. Check dependency references.', 'warn');
+            }
           }
           task.dependsOn = val;
         } else if (field === 'bucket') { task.bucket = val; }
@@ -2771,9 +3215,12 @@ function initKeyboardNav() {
 
 function setActiveCell(rowIdx, colIdx) {
   clearCellHighlights();
+  removeFillHandle();
   activeCell = { rowIdx, colIdx };
   cellEditMode = false;
   highlightActiveCell();
+  // Feature 13: Show fill handle on selected cell
+  if (isDataEditMode) showFillHandle();
 }
 
 function moveActiveCell(dRow, dCol) {
@@ -2810,6 +3257,7 @@ function clearCellHighlights() {
   document.querySelectorAll('.cell-selected,.cell-editing,.row-selected').forEach(el => {
     el.classList.remove('cell-selected', 'cell-editing', 'row-selected');
   });
+  removeFillHandle();
 }
 
 function enterCellEdit() {
@@ -2847,4 +3295,391 @@ function exitCellEdit() {
   }
   clearCellHighlights();
   highlightActiveCell();
+}
+
+
+/* ====================================================================
+   FEATURE 4: COLUMN RESIZE GUIDE LINE
+   ==================================================================== */
+
+// (Added inside startColResize via patching below)
+
+
+/* ====================================================================
+   FEATURE 8: BULK EDIT BAR
+   ==================================================================== */
+
+function showBulkEditBar(visCols) {
+  const bar = document.getElementById('bulk-edit-bar');
+  if (!bar) return;
+  if (selectedRows.size <= 1) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'flex';
+  const countEl = document.getElementById('bulk-edit-count');
+  if (countEl) countEl.textContent = selectedRows.size + ' selected';
+
+  // Populate bucket options
+  const bulkBucket = document.getElementById('bulk-bucket');
+  if (bulkBucket) {
+    const buckets = getAllBuckets();
+    let opts = '<option value="">Set Bucket...</option>';
+    buckets.forEach(b => { if (b) opts += `<option value="${b}">${b}</option>`; });
+    bulkBucket.innerHTML = opts;
+  }
+  // Populate priority options
+  const bulkPriority = document.getElementById('bulk-priority');
+  if (bulkPriority) {
+    let opts = '<option value="">Set Priority...</option>';
+    PRIORITY_OPTIONS.forEach(p => { opts += `<option value="${p}">${p}</option>`; });
+    bulkPriority.innerHTML = opts;
+  }
+  // Populate status options
+  const bulkStatus = document.getElementById('bulk-status');
+  if (bulkStatus) {
+    let opts = '<option value="">Set Status...</option>';
+    STATUS_OPTIONS.forEach(s => { if (s) opts += `<option value="${s}">${s}</option>`; });
+    bulkStatus.innerHTML = opts;
+  }
+}
+
+function bulkEditField(field, value) {
+  if (!value || selectedRows.size === 0) return;
+  snapshotUndo();
+  selectedRows.forEach(id => {
+    const task = allTasks.find(t => t.id === id);
+    if (task) task[field] = value;
+  });
+  reassignColors();
+  rebuildAfterChange();
+  if (currentTab === 'roadmap') renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function bulkDelete() {
+  deleteSelectedTasks();
+}
+
+
+/* ====================================================================
+   FEATURE 10: COLUMN DRAG REORDER
+   ==================================================================== */
+
+let _colDragId = null;
+
+function colDragStart(e, colId) {
+  _colDragId = colId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', colId);
+  const th = e.target.closest('th');
+  if (th) th.classList.add('col-dragging');
+}
+
+function colDragOver(e, colId) {
+  if (!_colDragId || _colDragId === colId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  // Visual indicator
+  const th = e.target.closest('th');
+  // Clear previous indicators
+  document.querySelectorAll('.col-drag-over').forEach(el => el.classList.remove('col-drag-over'));
+  if (th) th.classList.add('col-drag-over');
+}
+
+function colDrop(e, targetColId) {
+  e.preventDefault();
+  document.querySelectorAll('.col-drag-over').forEach(el => el.classList.remove('col-drag-over'));
+  if (!_colDragId || _colDragId === targetColId) return;
+
+  // Build or get the current column order
+  const visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
+  let order = columnOrder ? [...columnOrder] : visCols.map(c => c.id);
+  // Remove dragged column
+  const fromIdx = order.indexOf(_colDragId);
+  if (fromIdx < 0) return;
+  order.splice(fromIdx, 1);
+  // Insert before target
+  const toIdx = order.indexOf(targetColId);
+  if (toIdx < 0) { order.push(_colDragId); }
+  else { order.splice(toIdx, 0, _colDragId); }
+
+  columnOrder = order;
+  _colDragId = null;
+  renderDataTable();
+  scheduleSave();
+}
+
+function colDragEnd(e) {
+  _colDragId = null;
+  document.querySelectorAll('.col-dragging,.col-drag-over').forEach(el => {
+    el.classList.remove('col-dragging', 'col-drag-over');
+  });
+}
+
+
+/* ====================================================================
+   FEATURE 11: COLUMN FILTER DROPDOWN
+   ==================================================================== */
+
+let _colFilterDropdown = null;
+
+function openColumnFilter(e, colId) {
+  closeColumnFilter();
+  const rect = e.target.closest('th').getBoundingClientRect();
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'col-filter-dropdown';
+  dropdown.id = 'col-filter-dropdown';
+
+  // Gather unique values for this column
+  const values = new Set();
+  allTasks.forEach(t => {
+    let val = '';
+    switch (colId) {
+      case 'name': val = t.name || ''; break;
+      case 'bucket': val = t.bucket || ''; break;
+      case 'priority': val = t.priority || ''; break;
+      case 'status': val = t.status || ''; break;
+      case 'assigned': val = t.assigned || ''; break;
+      case 'labels': val = t.labels.join(', '); break;
+      case 'notes': val = t.notes || ''; break;
+      case 'sprint': val = t.sprint || ''; break;
+      case 'category': val = t.category || ''; break;
+      case 'cost': val = t.cost || ''; break;
+      default: val = String(t[colId] || '');
+    }
+    if (val) values.add(val);
+  });
+
+  const currentFilter = columnFilters[colId] || { values: new Set(), search: '' };
+
+  let html = `<input type="text" placeholder="Search..." value="${currentFilter.search || ''}" id="cf-search-${colId}" oninput="updateColumnFilterSearch('${colId}', this.value)">`;
+  const sortedValues = [...values].sort();
+  sortedValues.forEach(v => {
+    const checked = currentFilter.values && currentFilter.values.has(v) ? 'checked' : '';
+    html += `<label class="cf-item"><input type="checkbox" ${checked} onchange="toggleColumnFilterValue('${colId}', '${esc(v).replace(/'/g, "\\'")}', this.checked)"><span>${esc(v)}</span></label>`;
+  });
+  html += `<div class="col-filter-actions">
+    <button onclick="clearColumnFilter('${colId}')">Clear</button>
+    <button onclick="closeColumnFilter()">Done</button>
+  </div>`;
+
+  dropdown.innerHTML = html;
+  document.body.appendChild(dropdown);
+
+  // Position
+  let x = rect.left;
+  let y = rect.bottom + 4;
+  if (x + 250 > window.innerWidth) x = window.innerWidth - 260;
+  if (y + 300 > window.innerHeight) y = rect.top - 300;
+  dropdown.style.left = x + 'px';
+  dropdown.style.top = y + 'px';
+
+  _colFilterDropdown = dropdown;
+
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', _colFilterOutsideClick);
+  }, 0);
+}
+
+function _colFilterOutsideClick(e) {
+  if (_colFilterDropdown && !_colFilterDropdown.contains(e.target) && !e.target.closest('.col-filter-icon')) {
+    closeColumnFilter();
+  }
+}
+
+function closeColumnFilter() {
+  if (_colFilterDropdown) {
+    _colFilterDropdown.remove();
+    _colFilterDropdown = null;
+  }
+  document.removeEventListener('click', _colFilterOutsideClick);
+}
+
+function updateColumnFilterSearch(colId, val) {
+  if (!columnFilters[colId]) columnFilters[colId] = { values: new Set(), search: '' };
+  columnFilters[colId].search = val;
+  renderDataTable();
+}
+
+function toggleColumnFilterValue(colId, val, checked) {
+  if (!columnFilters[colId]) columnFilters[colId] = { values: new Set(), search: '' };
+  if (checked) columnFilters[colId].values.add(val);
+  else columnFilters[colId].values.delete(val);
+  renderDataTable();
+}
+
+function clearColumnFilter(colId) {
+  delete columnFilters[colId];
+  closeColumnFilter();
+  renderDataTable();
+}
+
+
+/* ====================================================================
+   FEATURE 13: CELL COPY-DOWN (FILL HANDLE)
+   ==================================================================== */
+
+let _fillHandle = null;
+let _fillActive = false;
+let _fillStartRow = -1;
+let _fillStartCol = -1;
+let _fillValue = null;
+let _fillField = null;
+
+function showFillHandle() {
+  removeFillHandle();
+  if (!activeCell || !isDataEditMode) return;
+  const tbody = DOM.dtBody;
+  if (!tbody) return;
+  const rows = tbody.querySelectorAll('tr[data-row-idx]');
+  const row = rows[activeCell.rowIdx];
+  if (!row) return;
+  const cell = row.children[activeCell.colIdx];
+  if (!cell) return;
+
+  // Determine if this cell has a fillable value
+  const colAttr = cell.dataset.col;
+  if (!colAttr || colAttr === 'select') return;
+
+  const handle = document.createElement('div');
+  handle.className = 'fill-handle';
+  cell.style.position = 'relative';
+  handle.style.position = 'absolute';
+  handle.style.right = '-4px';
+  handle.style.bottom = '-4px';
+  cell.appendChild(handle);
+  _fillHandle = handle;
+
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    _fillActive = true;
+    _fillStartRow = activeCell.rowIdx;
+    _fillStartCol = activeCell.colIdx;
+
+    // Get the value from the task
+    const taskId = parseInt(row.dataset.id);
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    _fillField = colAttr;
+    switch (colAttr) {
+      case 'name': _fillValue = task.name; break;
+      case 'bucket': _fillValue = task.bucket; break;
+      case 'priority': _fillValue = task.priority; break;
+      case 'status': _fillValue = task.status; break;
+      case 'assigned': _fillValue = task.assigned; break;
+      case 'notes': _fillValue = task.notes; break;
+      case 'effort': _fillValue = task.effort; break;
+      case 'cost': _fillValue = task.cost; break;
+      case 'sprint': _fillValue = task.sprint; break;
+      case 'category': _fillValue = task.category; break;
+      case 'pct': _fillValue = Math.round(task.percentComplete * 100); break;
+      default: _fillValue = null;
+    }
+
+    document.addEventListener('mousemove', onFillMove);
+    document.addEventListener('mouseup', onFillUp);
+  });
+}
+
+function onFillMove(e) {
+  if (!_fillActive) return;
+  const tbody = DOM.dtBody;
+  const rows = tbody.querySelectorAll('tr[data-row-idx]');
+  // Clear previous previews
+  tbody.querySelectorAll('.fill-preview-cell').forEach(c => c.classList.remove('fill-preview-cell'));
+
+  // Find which row the mouse is over
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      // Highlight cells from start to current
+      const minR = Math.min(_fillStartRow, i);
+      const maxR = Math.max(_fillStartRow, i);
+      for (let r = minR; r <= maxR; r++) {
+        if (r === _fillStartRow) continue;
+        const cell = rows[r]?.children[_fillStartCol];
+        if (cell) cell.classList.add('fill-preview-cell');
+      }
+      break;
+    }
+  }
+}
+
+function onFillUp(e) {
+  document.removeEventListener('mousemove', onFillMove);
+  document.removeEventListener('mouseup', onFillUp);
+  if (!_fillActive || _fillValue === null || !_fillField) {
+    _fillActive = false;
+    return;
+  }
+
+  const tbody = DOM.dtBody;
+  const rows = tbody.querySelectorAll('tr[data-row-idx]');
+  // Find target row
+  let targetRow = _fillStartRow;
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      targetRow = i;
+      break;
+    }
+  }
+
+  if (targetRow !== _fillStartRow) {
+    snapshotUndo();
+    const minR = Math.min(_fillStartRow, targetRow);
+    const maxR = Math.max(_fillStartRow, targetRow);
+    for (let r = minR; r <= maxR; r++) {
+      if (r === _fillStartRow) continue;
+      const tr = rows[r];
+      if (!tr) continue;
+      const taskId = parseInt(tr.dataset.id);
+      const task = allTasks.find(t => t.id === taskId);
+      if (!task) continue;
+
+      switch (_fillField) {
+        case 'name': task.name = _fillValue; break;
+        case 'bucket': task.bucket = _fillValue; break;
+        case 'priority': task.priority = _fillValue; break;
+        case 'status': task.status = _fillValue; break;
+        case 'assigned': task.assigned = _fillValue; break;
+        case 'notes': task.notes = _fillValue; break;
+        case 'effort': task.effort = _fillValue; break;
+        case 'cost': task.cost = _fillValue; break;
+        case 'sprint': task.sprint = _fillValue; break;
+        case 'category': task.category = _fillValue; break;
+        case 'pct': {
+          const isLeaf = !task.children || task.children.length === 0;
+          if (isLeaf) {
+            task.percentComplete = Math.max(0, Math.min(100, parseInt(_fillValue) || 0)) / 100;
+            task.manualProgress = true;
+          }
+          break;
+        }
+      }
+    }
+    rebuildAfterChange();
+    if (currentTab === 'roadmap') renderAll();
+    if (currentTab === 'dati') renderDataTable();
+    scheduleSave();
+  }
+
+  // Cleanup
+  tbody.querySelectorAll('.fill-preview-cell').forEach(c => c.classList.remove('fill-preview-cell'));
+  _fillActive = false;
+  _fillValue = null;
+  _fillField = null;
+}
+
+function removeFillHandle() {
+  if (_fillHandle) {
+    _fillHandle.remove();
+    _fillHandle = null;
+  }
 }

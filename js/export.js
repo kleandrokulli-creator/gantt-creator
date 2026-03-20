@@ -37,15 +37,108 @@ function _setExportBusy(btnEl, busy) {
    1. COPY PNG TO CLIPBOARD
    ==================================================================== */
 
+/**
+ * Prepare the DOM for PNG capture by expanding the timeline to full width.
+ * Returns { el, cleanup } where cleanup() restores all original styles.
+ *
+ * Instead of cloning (which loses flex layout), we temporarily expand the
+ * actual DOM so html2canvas can capture the full-width timeline at 1:1 scale.
+ */
+function _buildPNGCaptureElement() {
+  const gantt = document.getElementById('gantt-wrapper');
+  const leftPanel = document.querySelector('.left-panel');
+  const rightPanel = document.querySelector('.right-panel');
+  const timelineBody = document.getElementById('timeline-body');
+  const timelineHeader = document.getElementById('timeline-header');
+  const timelineCanvas = document.getElementById('timeline-canvas');
+  const legendBar = document.getElementById('legend-bar');
+  const hasLegend = legendBar && legendBar.classList.contains('open');
+
+  // Calculate the full content width
+  const leftW = leftPanel ? leftPanel.offsetWidth : 270;
+  const contentW = timelineCanvas ? parseInt(timelineCanvas.style.width) || timelineCanvas.scrollWidth : canvasWidth || 1200;
+  const fullW = leftW + contentW + 2; // +2 for border
+
+  // Save original styles
+  const saved = {
+    ganttW: gantt.style.width,
+    ganttMaxW: gantt.style.maxWidth,
+    ganttOverflow: gantt.style.overflow,
+    ganttPos: gantt.style.position,
+    rightOverflow: rightPanel ? rightPanel.style.overflow : '',
+    bodyOverflow: timelineBody ? timelineBody.style.overflow : '',
+    headerOverflow: timelineHeader ? timelineHeader.style.overflow : '',
+    bodyScrollLeft: timelineBody ? timelineBody.scrollLeft : 0,
+    headerScrollLeft: timelineHeader ? timelineHeader.scrollLeft : 0,
+  };
+
+  // Expand: remove overflow clipping, set full width
+  gantt.style.width = fullW + 'px';
+  gantt.style.maxWidth = fullW + 'px';
+  gantt.style.overflow = 'visible';
+  if (rightPanel) rightPanel.style.overflow = 'visible';
+  if (timelineBody) { timelineBody.style.overflow = 'visible'; timelineBody.scrollLeft = 0; }
+  if (timelineHeader) { timelineHeader.style.overflow = 'visible'; timelineHeader.scrollLeft = 0; }
+
+  // If legend is open, create a wrapper that contains gantt + legend at full width
+  let captureEl = gantt;
+  let wrapper = null;
+
+  if (hasLegend) {
+    wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + fullW + 'px;background:var(--bg,#fff);';
+
+    // Move the gantt temporarily into the wrapper (keeps live DOM — no clone needed)
+    const ganttParent = gantt.parentNode;
+    const ganttNext = gantt.nextSibling;
+    saved._ganttParent = ganttParent;
+    saved._ganttNext = ganttNext;
+    wrapper.appendChild(gantt);
+
+    // Clone legend (lightweight, no layout issues)
+    const legendClone = legendBar.cloneNode(true);
+    legendClone.style.maxHeight = 'none';
+    legendClone.style.padding = '8px 12px';
+    legendClone.style.width = '100%';
+    wrapper.appendChild(legendClone);
+
+    document.body.appendChild(wrapper);
+    captureEl = wrapper;
+  }
+
+  function cleanup() {
+    // Restore gantt to original position
+    if (wrapper) {
+      if (saved._ganttParent) {
+        if (saved._ganttNext) saved._ganttParent.insertBefore(gantt, saved._ganttNext);
+        else saved._ganttParent.appendChild(gantt);
+      }
+      wrapper.remove();
+    }
+    // Restore styles
+    gantt.style.width = saved.ganttW;
+    gantt.style.maxWidth = saved.ganttMaxW;
+    gantt.style.overflow = saved.ganttOverflow;
+    if (rightPanel) rightPanel.style.overflow = saved.rightOverflow;
+    if (timelineBody) { timelineBody.style.overflow = saved.bodyOverflow; timelineBody.scrollLeft = saved.bodyScrollLeft; }
+    if (timelineHeader) { timelineHeader.style.overflow = saved.headerOverflow; timelineHeader.scrollLeft = saved.headerScrollLeft; }
+  }
+
+  return { el: captureEl, cleanup: cleanup };
+}
+
 async function exportCopyPNG() {
   const btn = document.querySelector('[onclick="exportCopyPNG()"]');
   _setExportBusy(btn, true);
   _exportFeedback('Generating PNG...');
+  const cap = _buildPNGCaptureElement();
   try {
-    const el = document.getElementById('gantt-wrapper');
-    const canvas = await html2canvas(el, {
+    const canvas = await html2canvas(cap.el, {
       scale: 2, useCORS: true,
-      backgroundColor: '#FFFFFF'
+      backgroundColor: null,                 // transparent → inherits from DOM
+      width: cap.el.scrollWidth,
+      height: cap.el.scrollHeight,
+      windowWidth: cap.el.scrollWidth + 50,  // ensure full width is rendered
     });
     const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -53,6 +146,7 @@ async function exportCopyPNG() {
   } catch (e) {
     _exportFeedback('Failed: ' + e.message, true);
   }
+  cap.cleanup();
   _setExportBusy(btn, false);
 }
 
@@ -65,11 +159,14 @@ async function exportDownloadPNG() {
   const btn = document.querySelector('[onclick="exportDownloadPNG()"]');
   _setExportBusy(btn, true);
   _exportFeedback('Generating high-res PNG...');
+  const cap = _buildPNGCaptureElement();
   try {
-    const el = document.getElementById('gantt-wrapper');
-    const canvas = await html2canvas(el, {
+    const canvas = await html2canvas(cap.el, {
       scale: 3, useCORS: true,
-      backgroundColor: '#FFFFFF'
+      backgroundColor: null,
+      width: cap.el.scrollWidth,
+      height: cap.el.scrollHeight,
+      windowWidth: cap.el.scrollWidth + 50,
     });
     const a = document.createElement('a');
     a.download = _exportFileName() + '.png';
@@ -79,6 +176,7 @@ async function exportDownloadPNG() {
   } catch (e) {
     _exportFeedback('Failed: ' + e.message, true);
   }
+  cap.cleanup();
   _setExportBusy(btn, false);
 }
 
@@ -741,7 +839,7 @@ async function doHTMLExport(btnEl) {
   });
 
   if (selectedL1.size === 0) {
-    alert('Select at least one item to export.');
+    showToast('Select at least one item to export.', 'warn');
     return;
   }
 
@@ -846,6 +944,7 @@ async function doHTMLExport(btnEl) {
       milestoneInline: milestoneInline,
       showArrows: showArrows,
       currentZoom: currentZoom,
+      workingDaysMode: workingDaysMode,
     };
 
     const projectName = projects[currentProjectId]?.name || 'Roadmap';
@@ -873,7 +972,7 @@ async function doHTMLExport(btnEl) {
     updateSaveIndicator('HTML exported (' + filteredTasks.length + ' tasks)');
   } catch (e) {
     console.error('HTML export error:', e);
-    alert('Export failed: ' + e.message);
+    showToast('Export failed: ' + e.message, 'error');
     btnEl.textContent = 'Export HTML';
     btnEl.disabled = false;
   }
@@ -912,6 +1011,20 @@ body { padding-top: 0; }
 .ro-title-name { font-size: 1.2rem; font-weight: 700; }
 .ro-title-meta { font-size: 0.75rem; opacity: 0.6; font-weight: 400; }
 .toolbar { border-top: none; }
+.btn-icon.btn-sm{font-size:.7rem;padding:.25rem .4rem}
+.btn-icon.btn-sm svg{width:12px;height:12px}
+.tl-weekend{position:absolute;top:0;height:100%;background:var(--body-fg);opacity:.03;z-index:0;pointer-events:none}
+.tl-weekend-header{position:absolute;top:0;background:var(--body-fg);opacity:.04;z-index:0;pointer-events:none}
+.tl-day-label{position:absolute;top:54px;font-size:.5rem;color:var(--grey-txt);white-space:nowrap;display:flex;align-items:center;justify-content:center;height:18px}
+.tl-day-label.weekend{color:var(--red);opacity:.5}
+.legend-bar{border-top:1px solid var(--border);background:var(--card);padding:0;overflow:hidden;max-height:0;transition:max-height .25s ease,padding .25s ease}
+.legend-bar.open{max-height:200px;padding:.5rem .8rem}
+.legend-content{display:flex;flex-wrap:wrap;gap:.8rem;align-items:flex-start}
+.legend-section{display:flex;align-items:center;gap:.3rem;flex-wrap:wrap}
+.legend-section-title{font-weight:600;color:var(--grey-txt);text-transform:uppercase;font-size:.6rem;letter-spacing:.04em;margin-right:.2rem;white-space:nowrap}
+.legend-item{display:inline-flex;align-items:center;gap:.2rem;padding:.1rem .35rem;border-radius:4px;font-size:.68rem;white-space:nowrap;color:var(--body-fg)}
+.legend-item .legend-swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.legend-item .legend-star{flex-shrink:0;line-height:0}
 </style>
 </head>
 <body>
@@ -933,6 +1046,10 @@ body { padding-top: 0; }
     <button onclick="setZoom('month')" id="zoom-month" class="active">Month</button>
     <button onclick="setZoom('week')" id="zoom-week">Week</button>
     <button onclick="setZoom('day')" id="zoom-day">Day</button>
+    <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" title="Toggle working days (Mon-Fri) / calendar days">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
+      <span>Mon-Fri</span>
+    </button>
     <div class="sep"></div>
     <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">
       ${(() => {
@@ -963,6 +1080,10 @@ body { padding-top: 0; }
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
       <span id="expand-label">Expand all</span>
     </button>
+    <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon" title="Show/hide legend">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Legend
+    </button>
   </div>
 
   <div class="tab-bar">
@@ -987,6 +1108,9 @@ body { padding-top: 0; }
         <div class="timeline-canvas" id="timeline-canvas"></div>
       </div>
     </div>
+  </div>
+  <div class="legend-bar" id="legend-bar">
+    <div class="legend-content" id="legend-content"></div>
   </div>
 </div>
 
@@ -1025,7 +1149,7 @@ ${_getMinimalUICode()}
 <script>
 // === INIT ===
 (function() {
-  // Initialize DOM cache (required by render functions)
+  // Initialize DOM cache (required by all render functions)
   initDOMCache();
   // Provide no-op elements for DOM refs that don't exist in read-only mode
   const _noop = document.createElement('div');
@@ -1043,6 +1167,7 @@ ${_getMinimalUICode()}
   milestoneInline = d.milestoneInline !== false;
   showArrows = d.showArrows !== false;
   currentZoom = d.currentZoom || 'month';
+  workingDaysMode = d.workingDaysMode || false;
   projectMeta = d.projectMeta || {};
 
   // Deserialize tasks
@@ -1060,9 +1185,11 @@ ${_getMinimalUICode()}
   if (typeof computeDateRange === 'function') computeDateRange();
   if (typeof populateFilterDropdowns === 'function') populateFilterDropdowns();
 
-  // Set MS Inline button state
+  // Set button states
   const msBtn = document.getElementById('ms-inline-btn');
   if (msBtn) msBtn.classList.toggle('active', milestoneInline);
+  const wdBtn = document.getElementById('working-days-btn');
+  if (wdBtn) wdBtn.classList.toggle('active', workingDaysMode);
 
   renderAll();
 
@@ -1124,29 +1251,59 @@ function saveEditPanel() {}
 function openSettings() {}
 function closeSettings() {}
 function triggerFileUpload() {}
+function addNewTask() {}
+function loadTemplate() {}
+function insertTaskBelow() {}
+function openDataLabelPicker() {}
+function toggleSelectAll() {}
+function updateShowAllBtn() {}
+function handleTaskRowClick(e, outline, taskId, hasChildren) {
+  var arrow = e.target.closest('.arrow');
+  if (arrow && !arrow.classList.contains('hidden')) { toggleExpand(outline); }
+}
+function toggleTaskVisibility(taskId) {
+  if (hiddenTasks.has(taskId)) hiddenTasks.delete(taskId);
+  else hiddenTasks.add(taskId);
+  renderAll();
+}
 function handleBarClick(id, hasChildren) { if (hasChildren) navigateInto(id); }
+let tooltipTimeout;
 function showTooltip(e, id) {
-  const t = allTasks.find(x => x.id === id);
-  if (!t) return;
-  const tip = document.getElementById('tooltip');
-  const pct = Math.round(t.percentComplete * 100);
-  let html = '<strong>' + (t.name||'') + '</strong>';
-  if (t.start) html += '<br>' + fmtDate(t.start) + (t.finish ? ' - ' + fmtDate(t.finish) : '');
-  html += '<br>' + pct + '% complete';
-  if (t.bucket) html += '<br>Bucket: ' + t.bucket;
-  if (t.labels && t.labels.length) html += '<br>Labels: ' + t.labels.join(', ');
-  tip.innerHTML = html;
-  tip.style.display = 'block';
-  tip.style.left = e.pageX + 12 + 'px';
-  tip.style.top = e.pageY + 12 + 'px';
+  const task = allTasks.find(x => x.id === id);
+  if (!task) return;
+  clearTimeout(tooltipTimeout);
+  const pct = Math.round(task.percentComplete * 100);
+  let html = '<div class="tt-name" style="color:' + (task.color || '#64748B') + '">' + esc(task.name) + '</div>';
+  html += '<div class="tt-row"><span class="tt-label">Start:</span><span>' + (task.start ? fmtDate(task.start) : '—') + '</span></div>';
+  html += '<div class="tt-row"><span class="tt-label">End:</span><span>' + (task.finish ? fmtDate(task.finish) : '—') + '</span></div>';
+  html += '<div class="tt-row"><span class="tt-label">Duration:</span><span>' + (task.duration || '—') + '</span></div>';
+  html += '<div class="tt-row"><span class="tt-label">Complete:</span><span>' + pct + '%</span></div>';
+  html += '<div class="tt-progress"><div class="fill" style="width:' + pct + '%;background:' + (task.color || '#64748B') + '"></div></div>';
+  if (task.labels && task.labels.length) {
+    html += '<div class="tt-tags">';
+    task.labels.forEach(function(l) {
+      var c = LABEL_COLORS[l] || '#64748B';
+      html += '<span class="tt-tag" style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44">' + esc(l) + '</span>';
+    });
+    html += '</div>';
+  }
+  if (task.bucket) html += '<div class="tt-row" style="margin-top:.3rem"><span class="tt-label">Bucket:</span><span>' + esc(task.bucket) + '</span></div>';
+  if (task.priority) html += '<div class="tt-row"><span class="tt-label">Priority:</span><span>' + esc(task.priority) + '</span></div>';
+  if (task.dependsOn) html += '<div class="tt-row"><span class="tt-label">Depends on:</span><span>' + esc(task.dependsOn) + '</span></div>';
+  DOM.tooltip.innerHTML = html;
+  DOM.tooltip.classList.add('visible');
+  moveTooltip(e);
 }
 function moveTooltip(e) {
-  const tip = document.getElementById('tooltip');
-  tip.style.left = e.pageX + 12 + 'px';
-  tip.style.top = e.pageY + 12 + 'px';
+  var x = e.clientX + 12, y = e.clientY + 12;
+  var rect = DOM.tooltip.getBoundingClientRect();
+  if (x + 320 > window.innerWidth) x = e.clientX - 320;
+  if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - 8;
+  DOM.tooltip.style.left = x + 'px';
+  DOM.tooltip.style.top = y + 'px';
 }
 function hideTooltip() {
-  document.getElementById('tooltip').style.display = 'none';
+  tooltipTimeout = setTimeout(function() { DOM.tooltip.classList.remove('visible'); }, 100);
 }
 
 function navigateInto(taskId) {
@@ -1168,24 +1325,49 @@ function getCurrentScope() {
   const t = allTasks.find(x => x.id === last.taskId);
   return t ? (t.filteredChildren || t.children) : taskTree;
 }
+function countWorkingDays(start, end) {
+  if (!start || !end) return 0;
+  var count = 0, d = new Date(start);
+  d.setHours(0,0,0,0);
+  var endTime = new Date(end).setHours(0,0,0,0);
+  while (d.getTime() < endTime) {
+    var day = d.getDay();
+    if (day !== 0 && day !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.max(count, 1);
+}
+function isWeekend(date) { var d = date.getDay(); return d === 0 || d === 6; }
+function _smartDatePadding(dMin, dMax) {
+  var mn = new Date(dMin), mx = new Date(dMax);
+  if (currentZoom === 'day') {
+    mn.setTime(mn.getTime() - 2 * 86400000);
+    mx.setTime(mx.getTime() + 3 * 86400000);
+  } else if (currentZoom === 'week') {
+    var dow = mn.getDay() || 7;
+    mn.setDate(mn.getDate() - dow + 1);
+    var dowEnd = mx.getDay() || 7;
+    mx.setDate(mx.getDate() + (7 - dowEnd) + 7);
+  } else {
+    mn.setDate(1);
+    mx.setTime(mx.getTime() + 14 * 86400000);
+  }
+  return { min: mn, max: mx };
+}
 function getScopeDateRange(scope) {
-  let mn = null, mx = null;
+  let mn = Infinity, mx = -Infinity;
   function walk(nodes) {
     nodes.forEach(t => {
-      if (t.start && (!mn || t.start < mn)) mn = t.start;
-      if (t.finish && (!mx || t.finish > mx)) mx = t.finish;
-      if (t.start && !t.finish && (!mx || t.start > mx)) mx = t.start;
+      if (t.start && t.start.getTime() < mn) mn = t.start.getTime();
+      if (t.finish && t.finish.getTime() > mx) mx = t.finish.getTime();
+      if (t.start && !t.finish && t.start.getTime() > mx) mx = t.start.getTime();
       const ch = t.filteredChildren || t.children;
       if (ch && ch.length) walk(ch);
     });
   }
   walk(scope);
-  if (mn && mx) {
-    mn = new Date(mn); mn.setDate(mn.getDate() - 7);
-    mx = new Date(mx); mx.setDate(mx.getDate() + 14);
-    return { min: mn, max: mx };
-  }
-  return null;
+  if (mn === Infinity) return null;
+  return _smartDatePadding(mn, mx);
 }
 
 function setZoom(z) {
@@ -1248,6 +1430,25 @@ function toggleArrows() {
   if (lbl) lbl.textContent = showArrows ? 'Hide Dependencies' : 'Show Dependencies';
   renderAll();
 }
+function toggleWorkingDays() {
+  workingDaysMode = !workingDaysMode;
+  var btn = document.getElementById('working-days-btn');
+  if (btn) btn.classList.toggle('active', workingDaysMode);
+  allTasks.forEach(function(t) {
+    if (t.start && t.finish) {
+      var days;
+      if (workingDaysMode) {
+        days = countWorkingDays(t.start, t.finish);
+        if (t.isMilestone) days = 0;
+      } else {
+        var raw = Math.round((t.finish - t.start) / 86400000);
+        days = raw === 0 ? (t.isMilestone ? 0 : 1) : raw;
+      }
+      t.duration = days + (days === 1 ? ' day' : ' days');
+    }
+  });
+  renderAll();
+}
 function scrollToToday() {
   const tb = document.getElementById('timeline-body');
   const tl = document.querySelector('.tl-today');
@@ -1270,6 +1471,51 @@ function switchTab() {}
 function renderDataTable() {}
 function scheduleSave() {}
 function snapshotUndo() {}
+
+// Legend
+var legendOpen = false;
+function toggleLegend() {
+  legendOpen = !legendOpen;
+  var bar = document.getElementById('legend-bar');
+  var btn = document.getElementById('legend-toggle');
+  if (!bar || !btn) return;
+  if (legendOpen) {
+    renderLegend();
+    bar.classList.add('open');
+    btn.classList.add('active');
+  } else {
+    bar.classList.remove('open');
+    btn.classList.remove('active');
+  }
+}
+function renderLegend() {
+  var container = document.getElementById('legend-content');
+  if (!container) return;
+  var html = '';
+  var labelEntries = Object.entries(LABEL_COLORS);
+  if (labelEntries.length > 0) {
+    html += '<div class="legend-section"><span class="legend-section-title">Labels:</span>';
+    labelEntries.forEach(function(e) {
+      html += '<span class="legend-item"><span class="legend-swatch" style="background:' + e[1] + '"></span>' + esc(e[0]) + '</span>';
+    });
+    html += '</div>';
+  }
+  var bucketEntries = Object.entries(BUCKET_COLORS);
+  if (bucketEntries.length > 0) {
+    html += '<div class="legend-section"><span class="legend-section-title">Buckets:</span>';
+    bucketEntries.forEach(function(e) {
+      html += '<span class="legend-item"><span class="legend-swatch" style="background:' + e[1] + '"></span>' + esc(e[0]) + '</span>';
+    });
+    html += '</div>';
+  }
+  html += '<div class="legend-section"><span class="legend-section-title">Milestones:</span>';
+  PRIORITY_OPTIONS.forEach(function(p) {
+    var c = PRIORITY_COLORS[p] || '#64748B';
+    html += '<span class="legend-item"><span class="legend-star">' + starSVG(10, c) + '</span>' + esc(p) + '</span>';
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
 `;
 }
 

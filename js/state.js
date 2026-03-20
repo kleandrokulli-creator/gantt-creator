@@ -17,6 +17,8 @@ const DEFAULT_PROJECT_NAME = 'New Project';
 const STORAGE_KEY_PROJECTS = 'lvz-gantt-projects';
 const STORAGE_KEY_CURRENT = 'lvz-gantt-current';
 const STORAGE_KEY_THEME = 'lvz-gantt-theme';
+const STORAGE_KEY_DEFAULTS = 'lvz-gantt-defaults';
+const STORAGE_KEY_TEMPLATES = 'lvz-gantt-templates';
 
 // Timing (debounce/throttle)
 const DEBOUNCE_SAVE_MS = 500;
@@ -28,10 +30,18 @@ const DEBOUNCE_ZOOM_MS = 50;
 const MIN_COLUMN_WIDTH = 40;
 const ROW_HEIGHT = 28;
 const DEFAULT_COLUMN_WIDTHS = {
-  select:36, taskNum:36, outline:60, name:200, start:110, finish:110,
-  duration:80, milestone:40, labels:120, bucket:100, priority:90,
-  pct:130, deps:110, effort:80, notes:140, assigned:110, status:100,
-  cost:80, sprint:80, category:100, calendar:110
+  select:36, taskNum:36, outline:60, name:200, start:115, finish:115,
+  duration:80, milestone:36, labels:120, bucket:100, priority:90,
+  pct:120, deps:100, effort:70, notes:140, assigned:100, status:90,
+  cost:70, sprint:70, category:90, calendar:110
+};
+
+// Per-column minimum widths — columns can never shrink below these
+const MIN_COL_WIDTHS = {
+  select:36, taskNum:32, outline:44, name:100, start:115, finish:115,
+  duration:58, milestone:36, labels:50, bucket:60, priority:60,
+  pct:90, deps:70, effort:50, notes:50, assigned:60, status:60,
+  cost:50, sprint:50, category:60, calendar:60
 };
 
 // Status options for task status dropdowns
@@ -61,15 +71,18 @@ let navStack = [];
 let milestoneInline = true;
 let showArrows = true;
 let currentZoom = 'month';
+let workingDaysMode = false;   // true = working days (Mon-Fri), skip weekends & holidays
 let minDate, maxDate, totalDays, canvasWidth;
 let filteredTree = [];
 let selectedRows = new Set();
-let workingDaysMode = true;   // true = working days (Mon-Fri), skip weekends & holidays
 let calendars = {};            // project-level holiday calendars { calId: { name, isDefault, entries[], color } }
 let currentTab = 'roadmap';
 let undoStack = [];
 const MAX_UNDO = 20;
 let editPanelTaskId = null;
+// Multi-column sort: array of { col: number, dir: 'asc'|'desc' }
+let sortColumns = [];
+// Legacy single-sort aliases (used throughout the codebase)
 let sortCol = null, sortDir = null;
 let saveDebounce = null;
 let isDataEditMode = false;
@@ -114,6 +127,16 @@ let tableScrollMode = false; // false = fit-to-page (auto), true = scroll (fixed
 // --- Keyboard navigation state ---
 let activeCell = null; // { rowIdx, colIdx }
 let cellEditMode = false;
+
+// --- Copy/Paste cells ---
+let _copiedCellValue = null;
+let _copiedCellField = null;
+
+// --- Column drag reorder ---
+let columnOrder = null; // null = default order, array of column IDs when customized
+
+// --- Column filters ---
+let columnFilters = {}; // { colId: { values: Set, search: '' } }
 
 // --- Drag & drop row state ---
 let dragRowId = null;

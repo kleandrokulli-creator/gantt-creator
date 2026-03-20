@@ -186,6 +186,9 @@ function loadProjectById(id) {
   }
   columnWidths = proj.columnWidths || {};
   tableScrollMode = proj.tableScrollMode || false;
+  workingDaysMode = proj.workingDaysMode || false;
+  const wdBtn = document.getElementById('working-days-btn');
+  if (wdBtn) wdBtn.classList.toggle('active', workingDaysMode);
   getState().allExpanded = false;
   undoStack = [];
   updateShowAllBtn();
@@ -245,14 +248,32 @@ function switchProject(id) {
   loadProjectById(id);
 }
 
-function createNewProject(name) {
+async function createNewProject(name) {
   saveCurrentProjectToStorage();
   const id = generateId();
-  const pName = name || prompt('New project name:', DEFAULT_PROJECT_NAME);
+  const pName = name || await showPrompt('Enter a name for the new project:', { title: 'New Project', defaultValue: DEFAULT_PROJECT_NAME });
   if (pName === null) return;
+  const trimmed = (pName || DEFAULT_PROJECT_NAME).trim();
+  // Duplicate name check
+  const isDuplicate = Object.values(projects).some(p => p.name && p.name.toLowerCase() === trimmed.toLowerCase());
+  if (isDuplicate) {
+    showToast('A project with this name already exists. Please choose a different name.', 'warn');
+    return;
+  }
+
+  // Load global defaults for labels/buckets/priority (if saved)
+  const defaults = loadGlobalDefaults();
+  Object.keys(LABEL_COLORS).forEach(k => delete LABEL_COLORS[k]);
+  Object.assign(LABEL_COLORS, defaults.labelColors);
+  Object.keys(BUCKET_COLORS).forEach(k => delete BUCKET_COLORS[k]);
+  Object.assign(BUCKET_COLORS, defaults.bucketColors);
+  Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
+  Object.assign(PRIORITY_COLORS, defaults.priorityColors);
+
   projects[id] = {
-    name: pName || DEFAULT_PROJECT_NAME, meta: {}, tasks: [],
-    labelColors: { ...LABEL_COLORS }, rolloutColors: { ...ROLLOUT_COLORS }
+    name: trimmed, meta: {}, tasks: [],
+    labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
+    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS }
   };
   currentProjectId = id;
   projectMeta = {};
@@ -260,6 +281,7 @@ function createNewProject(name) {
   taskTree = [];
   filteredTree = [];
   navStack = [];
+  customBuckets = new Set();
   getState().expandedSet.clear();
   getState().collapsedSet.clear();
   getState().allExpanded = false;
@@ -271,23 +293,86 @@ function createNewProject(name) {
   saveCurrentProjectToStorage();
 }
 
-function renameCurrentProject() {
+/* ---------- GLOBAL DEFAULTS ---------- */
+
+const _BUILTIN_LABEL_COLORS = {
+  'Business': '#3B82F6', 'IT': '#8B5CF6', 'Mulesoft': '#EC4899',
+  'Testing': '#F59E0B', 'Development': '#10B981', 'UAT': '#EF4444', 'Design': '#14B8A6'
+};
+const _BUILTIN_BUCKET_COLORS = {
+  'AMZ-UK': '#3B82F6', 'eBay UK': '#F59E0B', 'Amazon AUS': '#10B981',
+  'TikTok ITA': '#EC4899', 'Privalia ITA': '#8B5CF6', 'VeePee ITA': '#14B8A6'
+};
+const _BUILTIN_PRIORITY_COLORS = {
+  'Urgent': '#EF4444', 'Important': '#F59E0B', 'Medium': '#3B82F6', 'Low': '#94A3B8'
+};
+
+function saveGlobalDefaults() {
+  try {
+    localStorage.setItem(STORAGE_KEY_DEFAULTS, JSON.stringify({
+      labelColors: { ...LABEL_COLORS },
+      bucketColors: { ...BUCKET_COLORS },
+      priorityColors: { ...PRIORITY_COLORS }
+    }));
+  } catch(e) { console.warn('Could not save defaults:', e); }
+}
+
+function loadGlobalDefaults() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DEFAULTS);
+    if (raw) {
+      const d = JSON.parse(raw);
+      return {
+        labelColors: d.labelColors || { ..._BUILTIN_LABEL_COLORS },
+        bucketColors: d.bucketColors || { ..._BUILTIN_BUCKET_COLORS },
+        priorityColors: d.priorityColors || { ..._BUILTIN_PRIORITY_COLORS }
+      };
+    }
+  } catch(e) {}
+  return {
+    labelColors: { ..._BUILTIN_LABEL_COLORS },
+    bucketColors: { ..._BUILTIN_BUCKET_COLORS },
+    priorityColors: { ..._BUILTIN_PRIORITY_COLORS }
+  };
+}
+
+function resetToBuiltinDefaults() {
+  Object.keys(LABEL_COLORS).forEach(k => delete LABEL_COLORS[k]);
+  Object.assign(LABEL_COLORS, _BUILTIN_LABEL_COLORS);
+  Object.keys(BUCKET_COLORS).forEach(k => delete BUCKET_COLORS[k]);
+  Object.assign(BUCKET_COLORS, _BUILTIN_BUCKET_COLORS);
+  Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
+  Object.assign(PRIORITY_COLORS, _BUILTIN_PRIORITY_COLORS);
+  reassignColors(); renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  if (typeof renderSettingsBody === 'function') renderSettingsBody();
+  scheduleSave();
+}
+
+async function renameCurrentProject() {
   if (!currentProjectId || !projects[currentProjectId]) return;
-  const newName = prompt('Rename project:', projects[currentProjectId].name);
+  const newName = await showPrompt('Rename project:', { title: 'Rename Project', defaultValue: projects[currentProjectId].name });
   if (!newName || !newName.trim()) return;
-  projects[currentProjectId].name = newName.trim();
+  const trimmed = newName.trim();
+  // Duplicate name check (exclude current project)
+  const isDuplicate = Object.entries(projects).some(([id, p]) => id !== currentProjectId && p.name && p.name.toLowerCase() === trimmed.toLowerCase());
+  if (isDuplicate) {
+    showToast('A project with this name already exists. Please choose a different name.', 'warn');
+    return;
+  }
+  projects[currentProjectId].name = trimmed;
   renderProjectSelector();
   saveCurrentProjectToStorage();
 }
 
-function deleteCurrentProject() {
+async function deleteCurrentProject() {
   if (!currentProjectId) return;
   const ids = Object.keys(projects);
   if (ids.length <= 1) {
-    alert('Cannot delete the only project. Create another one first.');
+    showToast('Cannot delete the only project. Create another one first.', 'warn');
     return;
   }
-  if (!confirm('Delete project "' + (projects[currentProjectId]?.name || '') + '"?')) return;
+  if (!await showConfirm('Delete project "' + (projects[currentProjectId]?.name || '') + '"?', { title: 'Delete Project', danger: true, okLabel: 'Delete' })) return;
   delete projects[currentProjectId];
   const remaining = Object.keys(projects);
   currentProjectId = remaining[0];
@@ -315,6 +400,45 @@ function buildTree() {
     }
     if (!t.parent) taskTree.push(t);
     stack.push(t);
+  });
+}
+
+/**
+ * Recalculate all outline strings based on each task's depth and position.
+ * Walks through allTasks in order, maintaining a counter stack so that
+ * sibling tasks at the same depth get sequential numbers (1, 2, 3...)
+ * and children get nested numbers (1.1, 1.2, ...).
+ */
+function recalculateAllOutlines() {
+  if (allTasks.length === 0) return;
+
+  // counters[d] = current count at depth d (1-based)
+  const counters = [];
+  let prevDepth = 0;
+
+  allTasks.forEach(t => {
+    const depth = t.depth;
+
+    if (depth > prevDepth) {
+      // Going deeper: push new counters for each new level
+      for (let d = prevDepth + 1; d <= depth; d++) {
+        counters[d] = 1;
+      }
+    } else if (depth <= prevDepth) {
+      // Same level or going up: increment counter at this depth
+      counters[depth] = (counters[depth] || 0) + 1;
+      // Trim any deeper counters (they're stale)
+      counters.length = depth + 1;
+    }
+
+    // Build outline from counters: e.g. counters[1]=2, counters[2]=3 => "2.3"
+    const parts = [];
+    for (let d = 1; d <= depth; d++) {
+      parts.push(counters[d] || 1);
+    }
+    t.outline = parts.join('.');
+
+    prevDepth = depth;
   });
 }
 
@@ -383,9 +507,16 @@ function computeDateRange() {
     dMin = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
     dMax = new Date(now.getFullYear(), now.getMonth() + 3, 0).getTime();
   }
-  minDate = new Date(dMin - 7 * MS_PER_DAY);
-  maxDate = new Date(dMax + 7 * MS_PER_DAY);
-  minDate.setDate(1);
+  // Use smart padding when available (after ui.js is loaded), otherwise fallback
+  if (typeof _smartDatePadding === 'function') {
+    const range = _smartDatePadding(dMin, dMax);
+    minDate = range.min;
+    maxDate = range.max;
+  } else {
+    minDate = new Date(dMin - 7 * MS_PER_DAY);
+    maxDate = new Date(dMax + 7 * MS_PER_DAY);
+    minDate.setDate(1);
+  }
 }
 
 function populateFilterDropdowns() {
@@ -414,6 +545,8 @@ function recalcDuration(task) {
     } else {
       const diffMs = task.finish.getTime() - task.start.getTime();
       const rawDays = Math.round(diffMs / MS_PER_DAY);
+      // Same-day task = 1 day (occupies that day), NOT a milestone
+      // Only explicit milestones (isMilestone flag) should be 0 days
       days = rawDays === 0 ? (task.isMilestone ? 0 : 1) : rawDays;
     }
     task.duration = days + (days === 1 ? ' day' : ' days');
@@ -477,7 +610,7 @@ function aggregateParentProgress() {
 function parseCSV(text, delimiter) {
   delimiter = delimiter || ',';
   const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) { alert('CSV file has no data rows.'); return; }
+  if (lines.length < 2) { showToast('CSV file has no data rows.', 'warn'); return; }
 
   const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
   const col = name => headers.findIndex(h => h.includes(name));
@@ -504,7 +637,9 @@ function parseCSV(text, delimiter) {
     const name = cells[cName] || '';
     if (!name) continue;
     id++;
-    const outline = cOutline >= 0 && cells[cOutline] ? cells[cOutline] : String(id);
+    let outline = cOutline >= 0 && cells[cOutline] ? cells[cOutline].trim() : String(id);
+    // Validate outline format: must be dot-separated numbers
+    if (!/^\d+(\.\d+)*$/.test(outline)) outline = String(id);
     const depth = outline.split('.').length;
     const startStr = cStart >= 0 ? cells[cStart] : '';
     const finishStr = cFinish >= 0 ? cells[cFinish] : '';
@@ -515,6 +650,7 @@ function parseCSV(text, delimiter) {
     const labels = cLabels >= 0 && cells[cLabels] ? cells[cLabels].split(';').map(s => s.trim()).filter(Boolean) : [];
     let pct = cPct >= 0 ? parseFloat(cells[cPct]) || 0 : 0;
     if (pct > 1) pct /= 100;
+    pct = Math.max(0, Math.min(1, pct));
 
     const task = {
       id, taskNumber: id, outline, depth, name, start, finish,
@@ -530,6 +666,14 @@ function parseCSV(text, delimiter) {
       cost: '', sprint: '', category: ''
     };
     allTasks.push(task);
+  }
+
+  // Warn about duplicate outlines
+  const outlineCounts = {};
+  allTasks.forEach(t => { outlineCounts[t.outline] = (outlineCounts[t.outline] || 0) + 1; });
+  const dupes = Object.entries(outlineCounts).filter(([_, c]) => c > 1).map(([o]) => o);
+  if (dupes.length > 0) {
+    showToast('Warning: duplicate outline numbers found (' + dupes.slice(0, 3).join(', ') + '). Some tasks may not display correctly.', 'warn', 6000);
   }
 
   buildTree();
@@ -599,12 +743,18 @@ function parseExcel(data) {
     if (!row || !row[cOutline]) continue;
     const outline = String(row[cOutline]).trim();
     if (!outline) continue;
+    // Validate outline format: must be dot-separated numbers (e.g., "1", "1.1", "1.2.3")
+    if (!/^\d+(\.\d+)*$/.test(outline)) {
+      console.warn('Skipping row with invalid outline format: ' + outline);
+      continue;
+    }
     const depth = outline.split('.').length;
     const startD = excelDateToJS(row[cStart]);
     const finishD = excelDateToJS(row[cFinish]);
     let pct = row[cComplete];
     if (typeof pct === 'number') { pct = pct > 1 ? pct / 100 : pct; }
     else { pct = parseFloat(pct) || 0; if (pct > 1) pct /= 100; }
+    pct = Math.max(0, Math.min(1, pct));
     const durStr = String(row[cDuration] || '0 days').trim();
     const isMilestone = durStr === '0 days' || durStr === '0';
     const labels = String(row[cLabels] || '').split(';').map(s => s.trim()).filter(Boolean);
@@ -627,6 +777,14 @@ function parseExcel(data) {
       category: cCategory >= 0 ? String(row[cCategory] || '').trim() : ''
     };
     allTasks.push(task);
+  }
+
+  // Warn about duplicate outlines
+  const outlineCounts = {};
+  allTasks.forEach(t => { outlineCounts[t.outline] = (outlineCounts[t.outline] || 0) + 1; });
+  const dupes = Object.entries(outlineCounts).filter(([_, c]) => c > 1).map(([o]) => o);
+  if (dupes.length > 0) {
+    showToast('Warning: duplicate outline numbers found (' + dupes.slice(0, 3).join(', ') + '). Some tasks may not display correctly.', 'warn', 6000);
   }
 
   buildTree();

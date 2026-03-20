@@ -654,16 +654,36 @@ function renderTimelineBars(dpx) {
       const deps = parseDependency(task.dependsOn);
       if (deps.length === 0) return;
 
-      const x2 = dateToPxR(task.start, dpx);
       const y2 = (idx + offsetRows) * rowH + rowH / 2;
 
       deps.forEach(dep => {
         const pred = allTasks.find(t => t.taskNumber === dep.taskNum);
-        if (!pred || !pred.finish) return;
+        if (!pred) return;
         const rIdx1 = visibleRows.findIndex(r => r.task.id === pred.id);
         if (rIdx1 === -1) return;
 
-        const x1 = dateToPxR(pred.finish, dpx);
+        // Pick start/end points based on dependency type (FS/SS/FF/SF)
+        const depType = dep.type || 'FS';
+        let x1, x2;
+        if (depType === 'FS') {
+          if (!pred.finish) return;
+          x1 = dateToPxR(pred.finish, dpx);
+          x2 = dateToPxR(task.start, dpx);
+        } else if (depType === 'SS') {
+          if (!pred.start) return;
+          x1 = dateToPxR(pred.start, dpx);
+          x2 = dateToPxR(task.start, dpx);
+        } else if (depType === 'FF') {
+          if (!pred.finish || !task.finish) return;
+          x1 = dateToPxR(pred.finish, dpx);
+          x2 = dateToPxR(task.finish, dpx);
+        } else if (depType === 'SF') {
+          if (!pred.start || !task.finish) return;
+          x1 = dateToPxR(pred.start, dpx);
+          x2 = dateToPxR(task.finish, dpx);
+        } else {
+          return;
+        }
         const y1 = (rIdx1 + offsetRows) * rowH + rowH / 2;
 
         // Curved path: horizontal out, curve down/up, horizontal in

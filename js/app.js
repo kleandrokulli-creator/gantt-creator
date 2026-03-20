@@ -86,7 +86,8 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
   // months in the native date picker. Dates are handled in 'change' instead.
   if (field === 'start' || field === 'finish') return;
   clearTimeout(saveDebounce);
-  saveDebounce = setTimeout(() => {
+  const saveFn = () => {
+    pendingInlineSave = null;
     const task = allTasks.find(t => t.id === id);
     if (!task) return;
     snapshotUndo();
@@ -143,7 +144,9 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
       if (needsFullRender) renderDataTable();
       else refreshDataTableDOM();
     }
-  }, DEBOUNCE_INPUT_MS);
+  };
+  pendingInlineSave = saveFn;
+  saveDebounce = setTimeout(saveFn, DEBOUNCE_INPUT_MS);
 });
 
 document.getElementById('dt-body').addEventListener('change', function (e) {

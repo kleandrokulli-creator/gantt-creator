@@ -947,11 +947,14 @@ function getFilteredFlatTasks() {
 /* ---------- TAB SYSTEM ---------- */
 
 function switchTab(tab) {
-  // Flush any pending save debounce from data table edits
-  if (typeof saveDebounce !== 'undefined' && saveDebounce) {
+  // Flush any pending inline save from data table edits before switching
+  if (saveDebounce) {
     clearTimeout(saveDebounce);
     saveDebounce = null;
+    if (pendingInlineSave) { pendingInlineSave(); pendingInlineSave = null; }
   }
+  // Close edit panel (saves pending changes via saveEditPanel)
+  if (editPanelTaskId !== null) closeEditPanel();
   // Save old tab filters
   const oldState = viewStates[currentTab];
   if (oldState) {

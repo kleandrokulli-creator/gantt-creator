@@ -82,6 +82,9 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
   const field = el.dataset.field;
   const id = parseInt(el.dataset.id);
   if (!field || isNaN(id)) return;
+  // Skip date fields on 'input' — they fire intermediate values when navigating
+  // months in the native date picker. Dates are handled in 'change' instead.
+  if (field === 'start' || field === 'finish') return;
   clearTimeout(saveDebounce);
   saveDebounce = setTimeout(() => {
     const task = allTasks.find(t => t.id === id);
@@ -91,28 +94,6 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
       const trimmed = el.value.trim();
       task.name = trimmed || DEFAULT_TASK_NAME;
       if (!trimmed) el.value = task.name;
-    }
-    else if (field === 'start') {
-      const newStart = el.value ? new Date(el.value + 'T00:00:00') : null;
-      if (newStart && task.finish && newStart > task.finish) {
-        task.finish = new Date(newStart);
-        const finishEl = el.closest('tr')?.querySelector('[data-field="finish"]');
-        if (finishEl) finishEl.value = el.value;
-      }
-      task.start = newStart;
-      recalcDuration(task);
-      propagateDependencies(task);
-    }
-    else if (field === 'finish') {
-      const newFinish = el.value ? new Date(el.value + 'T00:00:00') : null;
-      if (newFinish && task.start && newFinish < task.start) {
-        task.start = new Date(newFinish);
-        const startEl = el.closest('tr')?.querySelector('[data-field="start"]');
-        if (startEl) startEl.value = el.value;
-      }
-      task.finish = newFinish;
-      recalcDuration(task);
-      propagateDependencies(task);
     }
     else if (field === 'percentComplete') {
       let v = parseInt(el.value) || 0;
@@ -173,13 +154,40 @@ document.getElementById('dt-body').addEventListener('change', function (e) {
   const task = allTasks.find(t => t.id === id);
   if (!task) return;
   snapshotUndo();
-  if (field === 'bucket') task.bucket = el.value;
+  // Date fields: only handled in 'change' (not 'input') to avoid intermediate
+  // values when user navigates months in the native date picker
+  if (field === 'start') {
+    const newStart = el.value ? new Date(el.value + 'T00:00:00') : null;
+    if (newStart && isNaN(newStart.getTime())) return;
+    if (newStart && task.finish && newStart > task.finish) {
+      task.finish = new Date(newStart);
+      const finishEl = el.closest('tr')?.querySelector('[data-field="finish"]');
+      if (finishEl) finishEl.value = el.value;
+    }
+    task.start = newStart;
+    recalcDuration(task);
+    propagateDependencies(task);
+  } else if (field === 'finish') {
+    const newFinish = el.value ? new Date(el.value + 'T00:00:00') : null;
+    if (newFinish && isNaN(newFinish.getTime())) return;
+    if (newFinish && task.start && newFinish < task.start) {
+      task.start = new Date(newFinish);
+      const startEl = el.closest('tr')?.querySelector('[data-field="start"]');
+      if (startEl) startEl.value = el.value;
+    }
+    task.finish = newFinish;
+    recalcDuration(task);
+    propagateDependencies(task);
+  } else if (field === 'bucket') task.bucket = el.value;
   else if (field === 'priority') task.priority = el.value;
   else if (field === 'isMilestone') task.isMilestone = el.checked;
   else if (field === 'status') task.status = el.value;
   rebuildAfterChange();
   if (currentTab === 'roadmap') renderAll();
-  if (currentTab === 'dati') refreshDataTableDOM();
+  if (currentTab === 'dati') {
+    if (field === 'start' || field === 'finish') renderDataTable();
+    else refreshDataTableDOM();
+  }
   scheduleSave();
 });
 

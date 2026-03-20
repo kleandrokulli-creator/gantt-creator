@@ -4,27 +4,32 @@
 
 /* ---------- EXPORT DROPDOWN ---------- */
 
+let _exportMenuListener = null;
+
 function toggleExportMenu() {
   const menu = document.getElementById('export-menu');
   if (!menu) return;
   const isOpen = menu.classList.contains('open');
-  menu.classList.toggle('open', !isOpen);
-  if (!isOpen) {
-    // Close on outside click
-    setTimeout(() => {
-      document.addEventListener('click', function _closeExport(e) {
-        if (!e.target.closest('#export-dropdown')) {
-          menu.classList.remove('open');
-          document.removeEventListener('click', _closeExport);
-        }
-      });
-    }, 0);
+  if (isOpen) {
+    closeExportMenu();
+  } else {
+    menu.classList.add('open');
+    // Clean up any stale listener before adding new one
+    if (_exportMenuListener) document.removeEventListener('click', _exportMenuListener);
+    _exportMenuListener = function(e) {
+      if (!e.target.closest('#export-dropdown')) closeExportMenu();
+    };
+    setTimeout(() => document.addEventListener('click', _exportMenuListener), 0);
   }
 }
 
 function closeExportMenu() {
   const menu = document.getElementById('export-menu');
   if (menu) menu.classList.remove('open');
+  if (_exportMenuListener) {
+    document.removeEventListener('click', _exportMenuListener);
+    _exportMenuListener = null;
+  }
 }
 
 /* ---------- EDIT PANEL ---------- */
@@ -156,15 +161,25 @@ function openEditPanel(taskId) {
     });
   }
 
-  // Other fields: save on input (debounced) and change (immediate)
-  const otherFields = ['ep-name', 'ep-start', 'ep-finish', 'ep-bucket', 'ep-priority', 'ep-depends', 'ep-effort', 'ep-notes'];
-  otherFields.forEach(fid => {
+  // Text fields: save on input (debounced) and change (immediate)
+  const textFields = ['ep-name', 'ep-bucket', 'ep-priority', 'ep-depends', 'ep-effort', 'ep-notes'];
+  textFields.forEach(fid => {
     const el = document.getElementById(fid);
     if (!el) return;
     el.addEventListener('input', () => {
       clearTimeout(saveDebounce);
       saveDebounce = setTimeout(() => saveEditPanel(), DEBOUNCE_INPUT_MS);
     });
+    el.addEventListener('change', () => {
+      clearTimeout(saveDebounce);
+      saveEditPanel();
+    });
+  });
+  // Date fields: save ONLY on change (not input) to avoid saving
+  // intermediate values when user navigates months in the date picker
+  ['ep-start', 'ep-finish'].forEach(fid => {
+    const el = document.getElementById(fid);
+    if (!el) return;
     el.addEventListener('change', () => {
       clearTimeout(saveDebounce);
       saveEditPanel();
@@ -2462,15 +2477,18 @@ function showContextMenu(e, taskId) {
   // Close on outside click / Escape
   setTimeout(() => {
     document.addEventListener('click', closeContextMenu);
-    document.addEventListener('keydown', function escClose(ev) {
-      if (ev.key === 'Escape') { closeContextMenu(); document.removeEventListener('keydown', escClose); }
-    });
+    document.addEventListener('keydown', _ctxMenuEscHandler);
   }, 0);
+}
+
+function _ctxMenuEscHandler(ev) {
+  if (ev.key === 'Escape') closeContextMenu();
 }
 
 function closeContextMenu() {
   if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
   document.removeEventListener('click', closeContextMenu);
+  document.removeEventListener('keydown', _ctxMenuEscHandler);
 }
 
 function duplicateTask(taskId) {

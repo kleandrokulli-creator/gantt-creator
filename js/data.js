@@ -83,6 +83,7 @@ function saveProjectToStorage(projectId) {
     localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
   } catch (e) {
     console.warn('localStorage save failed:', e);
+    showToast('Save failed — storage may be full. Export your data to avoid losing work.', 'error');
     updateSaveIndicator('Save failed - storage full');
   }
 }
@@ -121,6 +122,7 @@ function saveCurrentProjectToStorage() {
     localStorage.setItem(STORAGE_KEY_CURRENT, currentProjectId);
   } catch (e) {
     console.warn('localStorage save failed:', e);
+    showToast('Save failed — storage may be full. Export your data to avoid losing work.', 'error');
     updateSaveIndicator('Save failed - storage full');
   }
 }
@@ -175,8 +177,11 @@ function loadProjectById(id) {
   populateFilterDropdowns();
   computeDateRange();
   navStack = [];
-  getState().expandedSet.clear();
-  getState().collapsedSet.clear();
+  // Reset view states for BOTH tabs to avoid stale IDs from previous project
+  viewStates.roadmap.expandedSet.clear();
+  viewStates.roadmap.collapsedSet.clear();
+  viewStates.dati.expandedSet.clear();
+  viewStates.dati.collapsedSet.clear();
   hiddenTasks = new Set(proj.hiddenTasks || []);
   customBuckets = new Set(proj.customBuckets || []);
   if (proj.visibleColumns && proj.visibleColumns.length > 0) {
@@ -253,7 +258,7 @@ async function createNewProject(name) {
   const id = generateId();
   const pName = name || await showPrompt('Enter a name for the new project:', { title: 'New Project', defaultValue: DEFAULT_PROJECT_NAME });
   if (pName === null) return;
-  const trimmed = (pName || DEFAULT_PROJECT_NAME).trim();
+  const trimmed = (pName || DEFAULT_PROJECT_NAME).trim().substring(0, 100);
   // Duplicate name check
   const isDuplicate = Object.values(projects).some(p => p.name && p.name.toLowerCase() === trimmed.toLowerCase());
   if (isDuplicate) {
@@ -353,7 +358,7 @@ async function renameCurrentProject() {
   if (!currentProjectId || !projects[currentProjectId]) return;
   const newName = await showPrompt('Rename project:', { title: 'Rename Project', defaultValue: projects[currentProjectId].name });
   if (!newName || !newName.trim()) return;
-  const trimmed = newName.trim();
+  const trimmed = newName.trim().substring(0, 100);
   // Duplicate name check (exclude current project)
   const isDuplicate = Object.entries(projects).some(([id, p]) => id !== currentProjectId && p.name && p.name.toLowerCase() === trimmed.toLowerCase());
   if (isDuplicate) {

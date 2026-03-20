@@ -429,6 +429,12 @@ if (resizer && leftPanel) {
 
   loadProjectById(currentProjectId);
 
+  // Flush pending save on browser close to prevent data loss
+  window.addEventListener('beforeunload', () => {
+    clearTimeout(autoSaveDebounce);
+    saveCurrentProjectToStorage();
+  });
+
   // Init data table interactions
   initDragDrop();
   initKeyboardNav();

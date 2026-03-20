@@ -6,7 +6,7 @@
 <title>PlanView - Gantt Roadmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=29">
+<link rel="stylesheet" href="css/style.css?v=30">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
@@ -211,6 +211,13 @@
       <div class="dati-header-left">
         <h2>Data Grid</h2>
         <span id="dati-task-count" style="font-size:0.8rem;color:var(--grey-txt);margin-left:12px;"></span>
+        <div class="bulk-edit-bar" id="bulk-edit-bar" style="display:none;margin-left:12px">
+          <span class="bulk-edit-count" id="bulk-edit-count"></span>
+          <select id="bulk-bucket" onchange="bulkEditField('bucket', this.value)"><option value="">Set Bucket...</option></select>
+          <select id="bulk-priority" onchange="bulkEditField('priority', this.value)"><option value="">Set Priority...</option></select>
+          <select id="bulk-status" onchange="bulkEditField('status', this.value)"><option value="">Set Status...</option></select>
+          <button onclick="bulkDelete()" class="bulk-delete-btn">Delete Selected</button>
+        </div>
       </div>
       <div class="dati-header-actions">
         <button onclick="toggleTableLayoutMode()" id="table-layout-btn" class="btn-col-picker" title="Fit: columns fill the page. Scroll: columns keep their width, horizontal scroll enabled.">
@@ -263,14 +270,14 @@
 </div>
 
 <!-- SCRIPTS (order matters: state → utils → dialog → data → render → ui → app) -->
-<script src="js/state.js?v=25"></script>
-<script src="js/utils.js?v=25"></script>
-<script src="js/dialog.js?v=25"></script>
-<script src="js/data.js?v=25"></script>
-<script src="js/render.js?v=25"></script>
-<script src="js/ui.js?v=25"></script>
-<script src="js/export.js?v=25"></script>
-<script src="js/app.js?v=25"></script>
+<script src="js/state.js?v=30"></script>
+<script src="js/utils.js?v=30"></script>
+<script src="js/dialog.js?v=30"></script>
+<script src="js/data.js?v=30"></script>
+<script src="js/render.js?v=30"></script>
+<script src="js/ui.js?v=30"></script>
+<script src="js/export.js?v=30"></script>
+<script src="js/app.js?v=30"></script>
 <script>
 // Pre-cache JS sources in localStorage for HTML export (runs once when loaded via HTTP)
 (function() {

@@ -390,6 +390,45 @@ function buildTree() {
   });
 }
 
+/**
+ * Recalculate all outline strings based on each task's depth and position.
+ * Walks through allTasks in order, maintaining a counter stack so that
+ * sibling tasks at the same depth get sequential numbers (1, 2, 3...)
+ * and children get nested numbers (1.1, 1.2, ...).
+ */
+function recalculateAllOutlines() {
+  if (allTasks.length === 0) return;
+
+  // counters[d] = current count at depth d (1-based)
+  const counters = [];
+  let prevDepth = 0;
+
+  allTasks.forEach(t => {
+    const depth = t.depth;
+
+    if (depth > prevDepth) {
+      // Going deeper: push new counters for each new level
+      for (let d = prevDepth + 1; d <= depth; d++) {
+        counters[d] = 1;
+      }
+    } else if (depth <= prevDepth) {
+      // Same level or going up: increment counter at this depth
+      counters[depth] = (counters[depth] || 0) + 1;
+      // Trim any deeper counters (they're stale)
+      counters.length = depth + 1;
+    }
+
+    // Build outline from counters: e.g. counters[1]=2, counters[2]=3 => "2.3"
+    const parts = [];
+    for (let d = 1; d <= depth; d++) {
+      parts.push(counters[d] || 1);
+    }
+    t.outline = parts.join('.');
+
+    prevDepth = depth;
+  });
+}
+
 /** Renumber all taskNumbers sequentially and update all dependsOn references */
 function renumberAllTaskNumbers() {
   const oldToNew = {};

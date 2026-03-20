@@ -605,53 +605,90 @@ function renderTimelineBars(dpx) {
 
 function renderDataTable() {
   const headerTr = DOM.dtHeader;
-  // Build visible column list in order
-  const visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
+  // Build visible column list in order, respecting custom column order if set
+  let visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
+  if (columnOrder && Array.isArray(columnOrder)) {
+    const ordered = [];
+    columnOrder.forEach(id => {
+      const col = visCols.find(c => c.id === id);
+      if (col) ordered.push(col);
+    });
+    // Append any visible columns not in columnOrder (new columns)
+    visCols.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
+    visCols = ordered;
+  }
   // Map column id -> sortable index for backwards-compatible sorting
   const SORT_MAP = { taskNum:1, outline:2, name:3, start:4, finish:5, duration:6, milestone:7, labels:8, bucket:9, priority:10, pct:11, deps:12, effort:13, notes:14, assigned:15, status:16, cost:17, sprint:18, category:19 };
   // Default min-widths per column type
   const DEFAULT_WIDTHS = DEFAULT_COLUMN_WIDTHS;
+
+  // Compute sticky-name-left offset
+  let stickyNameLeft = 0;
+  if (visibleColumns.has('select')) {
+    stickyNameLeft += columnWidths['select'] || DEFAULT_WIDTHS['select'] || 36;
+  }
+  if (isDataEditMode) stickyNameLeft += 28; // drag handle width
+  const table = document.getElementById('data-table');
+  if (table) table.style.setProperty('--sticky-name-left', stickyNameLeft + 'px');
 
   let hhtml = '';
   // Drag handle header
   if (isDataEditMode) hhtml += `<th style="width:28px;min-width:28px;max-width:28px;padding:0"></th>`;
   visCols.forEach(col => {
     const si = SORT_MAP[col.id];
-    const sortable = si ? `onclick="sortTable(${si})"` : '';
-    const arrow = (sortCol === si) ? `<span class="sort-arrow ${sortDir}"></span>` : (si ? '<span class="sort-arrow"></span>' : '');
+    // Multi-sort: find this column in sortColumns array
+    const sortEntry = sortColumns.find(s => s.col === si);
+    const sortIdx = sortEntry ? sortColumns.indexOf(sortEntry) : -1;
+    const sortable = si ? `onclick="sortTable(${si}, event)"` : '';
+    let arrow = '';
+    if (sortEntry) {
+      arrow = `<span class="sort-arrow ${sortEntry.dir}"></span>`;
+      if (sortColumns.length > 1) arrow += `<span class="sort-badge">${sortIdx + 1}</span>`;
+    } else if (si) {
+      arrow = '<span class="sort-arrow"></span>';
+    }
+    // Column filter icon
+    const hasFilter = columnFilters[col.id] && (columnFilters[col.id].search || (columnFilters[col.id].values && columnFilters[col.id].values.size > 0));
+    const filterIcon = (si && col.id !== 'select') ? `<span class="col-filter-icon${hasFilter ? ' active' : ''}" onclick="event.stopPropagation();openColumnFilter(event,'${col.id}')" title="Filter"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/></svg></span>` : '';
     const w = columnWidths[col.id] || DEFAULT_WIDTHS[col.id] || 100;
     const minW = (typeof MIN_COL_WIDTHS !== 'undefined' && MIN_COL_WIDTHS[col.id]) || MIN_COLUMN_WIDTH;
     const wStyle = `style="width:${w}px;min-width:${minW}px"`;
     const resizeHandle = (col.id !== 'select') ? `<div class="col-resize-handle" data-col="${col.id}" onmousedown="startColResize(event,'${col.id}')"></div>` : '';
+    // Column drag reorder attributes
+    const dragAttr = (col.id !== 'select') ? `draggable="true" ondragstart="colDragStart(event,'${col.id}')" ondragover="colDragOver(event,'${col.id}')" ondrop="colDrop(event,'${col.id}')" ondragend="colDragEnd(event)"` : '';
     if (col.id === 'select') {
       if (isDataEditMode) {
-        hhtml += `<th ${wStyle}><input type="checkbox" class="row-cb" onchange="toggleSelectAll(this.checked)">${resizeHandle}</th>`;
+        hhtml += `<th data-col-id="select" ${wStyle}><input type="checkbox" class="row-cb" onchange="toggleSelectAll(this.checked)">${resizeHandle}</th>`;
       } else {
-        hhtml += `<th ${wStyle}>${resizeHandle}</th>`;
+        hhtml += `<th data-col-id="select" ${wStyle}>${resizeHandle}</th>`;
       }
     } else {
-      hhtml += `<th ${wStyle} ${sortable}>${col.label}${arrow}${resizeHandle}</th>`;
+      hhtml += `<th data-col-id="${col.id}" ${wStyle} ${sortable} ${dragAttr}>${col.label}${arrow}${filterIcon}${resizeHandle}</th>`;
     }
   });
   headerTr.innerHTML = hhtml;
 
   let tasks;
-  if (sortCol !== null && sortDir) {
-    tasks = sortTaskList(getFilteredFlatTasks(), sortCol, sortDir);
+  const isSorted = sortColumns.length > 0;
+  if (isSorted) {
+    tasks = sortTaskListMulti(getFilteredFlatTasks(), sortColumns);
   } else {
     // Build independent visible list for Data tab: show all milestones, use dati tab state
     const dataRows = buildVisibleList(filteredTree, { skipInlineMs: false, tabState: viewStates.dati });
     tasks = dataRows.map(r => r.task);
   }
+  // Apply column filters
+  tasks = applyColumnFilters(tasks, visCols);
   
   const tbody = DOM.dtBody;
   let bhtml = '';
   const bucketsArr = getAllBuckets();
   let prevL1 = null;
+  let groupIndex = 0; // Feature 12: group striping
+  const todayTime = new Date().setHours(0, 0, 0, 0);
   tasks.forEach((t, idx) => {
     const isParent = t.children && t.children.length > 0;
     const autoCalcPct = isParent;
-    const isSorted = sortCol !== null && sortDir;
     const depth = isSorted ? 1 : (t.depth || 1);
     const indent = (depth - 1) * 20;
     const pct = Math.round(t.percentComplete * 100);
@@ -666,7 +703,13 @@ function renderDataTable() {
     // Detect new level-1 group for separator
     const l1 = t.outline.split('.')[0];
     const isNewGroup = depth === 1 && prevL1 !== null && l1 !== prevL1;
+    if (isNewGroup) groupIndex++;
     prevL1 = depth === 1 ? l1 : prevL1;
+
+    // Feature 3: Conditional formatting
+    const isOverdue = t.finish && t.finish.getTime() < todayTime && pct < 100;
+    const isComplete = pct === 100;
+    const dateWarn = t.start && t.finish && t.finish < t.start;
 
     // Row classes
     const rowCls = [
@@ -674,7 +717,10 @@ function renderDataTable() {
       depth === 1 ? 'dt-level1' : '',
       depth === 2 ? 'dt-level2' : '',
       depth >= 3 ? 'dt-level3-plus' : '',
-      isNewGroup ? 'dt-group-sep' : ''
+      isNewGroup ? 'dt-group-sep' : '',
+      isOverdue ? 'dt-overdue' : '',
+      isComplete ? 'dt-complete' : '',
+      (groupIndex % 2 === 1) ? 'dt-group-alt' : ''
     ].filter(Boolean).join(' ');
 
     // Completion cell: greyed out for auto-calc parents
@@ -705,19 +751,19 @@ function renderDataTable() {
           case 'select': rowContent += `<td data-col="select" class="dt-action-cell"><input type="checkbox" class="row-cb" ${checked} data-id="${t.id}"><button class="dt-insert-btn" onclick="insertTaskBelow(${t.id})" title="Inserisci task sotto">+</button></td>`; break;
           case 'taskNum': rowContent += `<td data-col="taskNum" style="color:var(--grey-txt);font-size:.75rem">${t.taskNumber}</td>`; break;
           case 'outline': rowContent += `<td data-col="outline" style="color:var(--grey-txt);font-size:.78rem">${esc(t.outline)}</td>`; break;
-          case 'name': rowContent += `<td data-col="name"><div class="task-name-cell">${indentHtml}${typeIcon}<input type="text" value="${esc(t.name)}" data-field="name" data-id="${t.id}"></div></td>`; break;
-          case 'start': rowContent += `<td data-col="start"><input type="date" value="${startStr}" data-field="start" data-id="${t.id}"></td>`; break;
-          case 'finish': rowContent += `<td data-col="finish"><input type="date" value="${finishStr}" data-field="finish" data-id="${t.id}"></td>`; break;
+          case 'name': rowContent += `<td data-col="name" title="${esc(t.name)}"><div class="task-name-cell">${indentHtml}${typeIcon}<input type="text" value="${esc(t.name)}" data-field="name" data-id="${t.id}" title="${esc(t.name)}"></div></td>`; break;
+          case 'start': rowContent += `<td data-col="start"${dateWarn ? ' class="dt-cell-warn"' : ''}><input type="date" value="${startStr}" data-field="start" data-id="${t.id}"></td>`; break;
+          case 'finish': rowContent += `<td data-col="finish"${dateWarn ? ' class="dt-cell-warn"' : ''}><input type="date" value="${finishStr}" data-field="finish" data-id="${t.id}"></td>`; break;
           case 'duration': rowContent += `<td data-col="duration" style="font-size:.78rem;color:var(--grey-txt)">${esc(t.duration)}</td>`; break;
           case 'milestone': rowContent += `<td data-col="milestone" style="text-align:center"><input type="checkbox" class="ms-cb" data-field="isMilestone" data-id="${t.id}" ${t.isMilestone ? 'checked' : ''} title="Milestone"></td>`; break;
           case 'labels': rowContent += `<td data-col="labels"><div class="cell-tags cell-tags-edit" data-id="${t.id}" onclick="openDataLabelPicker(this,${t.id})">${tagsHtml}<span class="tag-add-hint">+</span></div></td>`; break;
           case 'bucket': rowContent += `<td data-col="bucket"><select data-field="bucket" data-id="${t.id}">${bucketsArr.map(b => `<option value="${b}" ${b === t.bucket ? 'selected' : ''}>${b || '—'}</option>`).join('')}</select></td>`; break;
           case 'priority': rowContent += `<td data-col="priority"><select data-field="priority" data-id="${t.id}">${['', 'Urgent', 'Important', 'Medium', 'Low'].map(p => `<option value="${p}" ${p === t.priority ? 'selected' : ''}>${p || '—'}</option>`).join('')}</select></td>`; break;
           case 'pct': rowContent += `<td data-col="pct"><div class="${pctClass}"><input type="number" min="0" max="100" value="${pct}" data-field="percentComplete" data-id="${t.id}" style="width:50px" ${pctDisabled}><div class="mini-prog"><div class="fill" style="width:${pct}%;background:${t.color}"></div></div></div></td>`; break;
-          case 'deps': rowContent += `<td data-col="deps" class="dep-cell-wrap">${t.dependsOn ? `<div class="dep-hover-edit" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}">` : '<div>'}<input type="text" value="${esc(t.dependsOn)}" data-field="dependsOn" data-id="${t.id}"></div></td>`; break;
+          case 'deps': rowContent += `<td data-col="deps" class="dep-cell-wrap" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<div class="dep-hover-edit" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}">` : '<div>'}<input type="text" value="${esc(t.dependsOn)}" data-field="dependsOn" data-id="${t.id}" title="${esc(buildDepTooltip(t.dependsOn))}"></div></td>`; break;
           case 'effort': rowContent += `<td data-col="effort"><input type="text" value="${esc(String(t.effort || ''))}" data-field="effort" data-id="${t.id}"></td>`; break;
-          case 'notes': rowContent += `<td data-col="notes"><input type="text" value="${esc(t.notes || '')}" data-field="notes" data-id="${t.id}"></td>`; break;
-          case 'assigned': rowContent += `<td data-col="assigned"><input type="text" value="${esc(t.assigned || '')}" data-field="assigned" data-id="${t.id}" placeholder="..."></td>`; break;
+          case 'notes': rowContent += `<td data-col="notes" title="${esc(t.notes || '')}"><input type="text" value="${esc(t.notes || '')}" data-field="notes" data-id="${t.id}" title="${esc(t.notes || '')}"></td>`; break;
+          case 'assigned': rowContent += `<td data-col="assigned" title="${esc(t.assigned || '')}"><input type="text" value="${esc(t.assigned || '')}" data-field="assigned" data-id="${t.id}" placeholder="..." title="${esc(t.assigned || '')}"></td>`; break;
           case 'status': rowContent += `<td data-col="status"><select data-field="status" data-id="${t.id}">${STATUS_OPTIONS.map(s => `<option value="${s}" ${s === (t.status||'') ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></td>`; break;
           case 'cost': rowContent += `<td data-col="cost"><input type="text" value="${esc(t.cost || '')}" data-field="cost" data-id="${t.id}" placeholder="..."></td>`; break;
           case 'sprint': rowContent += `<td data-col="sprint"><input type="text" value="${esc(t.sprint || '')}" data-field="sprint" data-id="${t.id}" placeholder="..."></td>`; break;
@@ -731,19 +777,19 @@ function renderDataTable() {
           case 'select': rowContent += `<td data-col="select" class="dt-action-cell"><input type="checkbox" class="row-cb" ${checked} data-id="${t.id}" style="opacity:0;pointer-events:none"></td>`; break;
           case 'taskNum': rowContent += `<td data-col="taskNum" style="color:var(--grey-txt);font-size:.75rem">${t.taskNumber}</td>`; break;
           case 'outline': rowContent += `<td data-col="outline" style="color:var(--grey-txt);font-size:.78rem">${esc(t.outline)}</td>`; break;
-          case 'name': rowContent += `<td data-col="name"><div class="task-name-cell">${indentHtml}${typeIcon}<span class="ro-text" style="font-weight:500">${esc(t.name)}</span></div></td>`; break;
-          case 'start': rowContent += `<td data-col="start"><span class="ro-text">${dispStart}</span></td>`; break;
-          case 'finish': rowContent += `<td data-col="finish"><span class="ro-text">${dispFinish}</span></td>`; break;
+          case 'name': rowContent += `<td data-col="name" title="${esc(t.name)}"><div class="task-name-cell">${indentHtml}${typeIcon}<span class="ro-text" style="font-weight:500" title="${esc(t.name)}">${esc(t.name)}</span></div></td>`; break;
+          case 'start': rowContent += `<td data-col="start"${dateWarn ? ' class="dt-cell-warn"' : ''}><span class="ro-text">${dispStart}</span></td>`; break;
+          case 'finish': rowContent += `<td data-col="finish"${dateWarn ? ' class="dt-cell-warn"' : ''}><span class="ro-text">${dispFinish}</span></td>`; break;
           case 'duration': rowContent += `<td data-col="duration" style="font-size:.78rem;color:var(--grey-txt)">${esc(t.duration)}</td>`; break;
           case 'milestone': rowContent += `<td data-col="milestone" style="text-align:center">${msIcon}</td>`; break;
           case 'labels': rowContent += `<td data-col="labels"><div class="cell-tags">${tagsHtml}</div></td>`; break;
           case 'bucket': rowContent += `<td data-col="bucket"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.bucket || '—')}</span></td>`; break;
           case 'priority': rowContent += `<td data-col="priority"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.priority || '—')}</span></td>`; break;
           case 'pct': rowContent += `<td data-col="pct"><div class="${pctClass}"><span class="ro-text" style="width:40px;display:inline-block;text-align:right;font-size:0.85rem">${pct}%</span><div class="mini-prog" style="margin-left:8px"><div class="fill" style="width:${pct}%;background:${t.color}"></div></div></div></td>`; break;
-          case 'deps': rowContent += `<td data-col="deps">${t.dependsOn ? `<span class="ro-text dep-hover" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}">${esc(t.dependsOn)}</span>` : '<span class="ro-text">—</span>'}</td>`; break;
+          case 'deps': rowContent += `<td data-col="deps" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<span class="ro-text dep-hover" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}" title="${esc(buildDepTooltip(t.dependsOn))}">${esc(t.dependsOn)}</span>` : '<span class="ro-text">—</span>'}</td>`; break;
           case 'effort': rowContent += `<td data-col="effort"><span class="ro-text">${esc(String(t.effort || '—'))}</span></td>`; break;
-          case 'notes': rowContent += `<td data-col="notes"><span class="ro-text" style="color:var(--grey-txt);font-style:italic">${esc(t.notes || '')}</span></td>`; break;
-          case 'assigned': rowContent += `<td data-col="assigned"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.assigned || '—')}</span></td>`; break;
+          case 'notes': rowContent += `<td data-col="notes" title="${esc(t.notes || '')}"><span class="ro-text" style="color:var(--grey-txt);font-style:italic" title="${esc(t.notes || '')}">${esc(t.notes || '')}</span></td>`; break;
+          case 'assigned': rowContent += `<td data-col="assigned" title="${esc(t.assigned || '')}"><span class="ro-text" style="color:var(--grey-txt)" title="${esc(t.assigned || '—')}">${esc(t.assigned || '—')}</span></td>`; break;
           case 'status': rowContent += `<td data-col="status">${renderStatusBadge(t.status)}</td>`; break;
           case 'cost': rowContent += `<td data-col="cost"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.cost || '—')}</span></td>`; break;
           case 'sprint': rowContent += `<td data-col="sprint"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.sprint || '—')}</span></td>`; break;
@@ -777,6 +823,9 @@ function renderDataTable() {
 
   const countEl = document.getElementById('dati-task-count');
   if (countEl) countEl.textContent = `${tasks.length} tasks`;
+
+  // Feature 8: Bulk edit bar
+  if (typeof showBulkEditBar === 'function') showBulkEditBar(visCols);
 
   // Reset keyboard nav state
   activeCell = null;
@@ -863,16 +912,120 @@ function sortTaskList(tasks, col, dir) {
   return tasks;
 }
 
-function sortTable(colIdx) {
+/** Multi-column sort: sorts by each column in priority order */
+function sortTaskListMulti(tasks, sortCols) {
+  if (!sortCols || sortCols.length === 0) return tasks;
+  const keys = [null, 'idx', 'outline', 'name', 'start', 'finish', 'duration', 'isMilestone', 'labels', 'bucket', 'priority', 'percentComplete', 'dependsOn', 'effort', 'notes', 'assigned', 'status', 'cost', 'sprint', 'category'];
+  tasks.sort((a, b) => {
+    for (const sc of sortCols) {
+      const key = keys[sc.col];
+      if (!key || key === 'idx') continue;
+      let va, vb;
+      if (key === 'start' || key === 'finish') {
+        va = a[key] ? a[key].getTime() : 0;
+        vb = b[key] ? b[key].getTime() : 0;
+      } else if (key === 'percentComplete') {
+        va = a.percentComplete; vb = b.percentComplete;
+      } else if (key === 'labels') {
+        va = a.labels.join(';'); vb = b.labels.join(';');
+      } else {
+        va = String(a[key] || '').toLowerCase();
+        vb = String(b[key] || '').toLowerCase();
+      }
+      if (va < vb) return sc.dir === 'asc' ? -1 : 1;
+      if (va > vb) return sc.dir === 'asc' ? 1 : -1;
+    }
+    return 0;
+  });
+  return tasks;
+}
+
+function sortTable(colIdx, event) {
   // Suppress sort if a column resize just finished
   if (typeof _colResizeJustFinished !== 'undefined' && _colResizeJustFinished) return;
-  if (sortCol === colIdx) {
-    if (sortDir === 'asc') sortDir = 'desc';
-    else if (sortDir === 'desc') { sortDir = null; sortCol = null; }
+
+  const shiftKey = event && event.shiftKey;
+
+  if (shiftKey) {
+    // Multi-sort: add/toggle this column
+    const existing = sortColumns.findIndex(s => s.col === colIdx);
+    if (existing >= 0) {
+      if (sortColumns[existing].dir === 'asc') {
+        sortColumns[existing].dir = 'desc';
+      } else {
+        sortColumns.splice(existing, 1);
+      }
+    } else {
+      sortColumns.push({ col: colIdx, dir: 'asc' });
+    }
   } else {
-    sortCol = colIdx; sortDir = 'asc';
+    // Single sort: replaces everything
+    const existing = sortColumns.find(s => s.col === colIdx);
+    if (existing) {
+      if (existing.dir === 'asc') {
+        sortColumns = [{ col: colIdx, dir: 'desc' }];
+      } else {
+        sortColumns = [];
+      }
+    } else {
+      sortColumns = [{ col: colIdx, dir: 'asc' }];
+    }
   }
+
+  // Sync legacy variables for backward compat
+  if (sortColumns.length === 1) {
+    sortCol = sortColumns[0].col;
+    sortDir = sortColumns[0].dir;
+  } else if (sortColumns.length === 0) {
+    sortCol = null;
+    sortDir = null;
+  } else {
+    sortCol = sortColumns[0].col;
+    sortDir = sortColumns[0].dir;
+  }
+
   renderDataTable();
+}
+
+/** Apply column filters to a task list */
+function applyColumnFilters(tasks, visCols) {
+  if (!columnFilters || Object.keys(columnFilters).length === 0) return tasks;
+  return tasks.filter(t => {
+    for (const colId of Object.keys(columnFilters)) {
+      const filter = columnFilters[colId];
+      if (!filter) continue;
+      const hasValues = filter.values && filter.values.size > 0;
+      const hasSearch = filter.search && filter.search.trim().length > 0;
+      if (!hasValues && !hasSearch) continue;
+
+      let cellVal = '';
+      switch (colId) {
+        case 'name': cellVal = t.name || ''; break;
+        case 'start': cellVal = t.start ? dateToInputStr(t.start) : ''; break;
+        case 'finish': cellVal = t.finish ? dateToInputStr(t.finish) : ''; break;
+        case 'duration': cellVal = t.duration || ''; break;
+        case 'bucket': cellVal = t.bucket || ''; break;
+        case 'priority': cellVal = t.priority || ''; break;
+        case 'labels': cellVal = t.labels.join(', '); break;
+        case 'status': cellVal = t.status || ''; break;
+        case 'assigned': cellVal = t.assigned || ''; break;
+        case 'notes': cellVal = t.notes || ''; break;
+        case 'deps': cellVal = t.dependsOn || ''; break;
+        case 'effort': cellVal = String(t.effort || ''); break;
+        case 'cost': cellVal = t.cost || ''; break;
+        case 'sprint': cellVal = t.sprint || ''; break;
+        case 'category': cellVal = t.category || ''; break;
+        case 'pct': cellVal = String(Math.round(t.percentComplete * 100)); break;
+        case 'outline': cellVal = t.outline || ''; break;
+        case 'taskNum': cellVal = String(t.taskNumber); break;
+        default: cellVal = '';
+      }
+
+      if (hasSearch && !cellVal.toLowerCase().includes(filter.search.toLowerCase())) return false;
+      if (hasValues && !filter.values.has(cellVal)) return false;
+    }
+    return true;
+  });
 }
 
 function syncScroll() {

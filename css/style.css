@@ -732,3 +732,244 @@ input:focus-visible, textarea:focus-visible {
 .tab-bar .tab{transition:color .2s,border-color .2s}
 .modal .modal-body{transition:opacity .12s ease}
 .modal .modal-body.switching{opacity:.3}
+
+
+/* ===== FEATURE 2: FROZEN COLUMNS (sticky select + name) ===== */
+.data-table th[data-col-id="select"],
+.data-table td[data-col="select"] {
+  position: sticky;
+  left: 0;
+  z-index: 6;
+  background: var(--card);
+}
+.data-table th[data-col-id="name"],
+.data-table td[data-col="name"] {
+  position: sticky;
+  z-index: 5;
+  background: var(--card);
+}
+/* Use a CSS custom property for the name column left offset */
+.data-table th[data-col-id="name"] { left: var(--sticky-name-left, 36px); }
+.data-table td[data-col="name"] { left: var(--sticky-name-left, 36px); }
+/* Ensure hover row bg also applies to sticky cells */
+.data-table tbody tr:hover > td[data-col="select"],
+.data-table tbody tr:hover > td[data-col="name"] { background: var(--row-hover); }
+.data-table tbody tr.dt-level1 > td[data-col="select"],
+.data-table tbody tr.dt-level1 > td[data-col="name"] { background: color-mix(in srgb, var(--blue) 5%, var(--card)); }
+.data-table tbody tr:nth-child(even) > td[data-col="select"],
+.data-table tbody tr:nth-child(even) > td[data-col="name"] { background: color-mix(in srgb, var(--row-alt) 100%, var(--card)); }
+
+
+/* ===== FEATURE 3: CONDITIONAL FORMATTING ===== */
+.data-table tr.dt-overdue > td[data-col="finish"] { color: var(--red); font-weight: 600; }
+.data-table tr.dt-overdue > td[data-col="start"] { color: var(--red); }
+.data-table tr.dt-complete > td[data-col="pct"] .mini-prog .fill { background: var(--green) !important; }
+.data-table tr.dt-complete { opacity: 0.7; }
+.dt-cell-warn { outline: 2px solid var(--amber) !important; outline-offset: -2px; }
+
+
+/* ===== FEATURE 4: COLUMN RESIZE GUIDE LINE ===== */
+.col-resize-guide {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--blue);
+  opacity: 0.5;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+
+/* ===== FEATURE 5: INLINE VALIDATION ===== */
+.dt-cell-invalid {
+  border-color: var(--red) !important;
+  background: rgba(239,68,68,.05) !important;
+}
+.dt-cell-invalid:focus {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 2px rgba(239,68,68,.15);
+}
+
+
+/* ===== FEATURE 8: BULK EDIT BAR ===== */
+.bulk-edit-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(59,130,246,.06);
+  border: 1px solid rgba(59,130,246,.15);
+  border-radius: 8px;
+  margin-bottom: 0;
+  flex-wrap: wrap;
+  font-size: .82rem;
+}
+.bulk-edit-bar select {
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--body-fg);
+  font-family: inherit;
+  font-size: .8rem;
+  padding: 0 8px;
+  cursor: pointer;
+}
+.bulk-edit-count {
+  font-weight: 600;
+  color: var(--blue);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.bulk-delete-btn {
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-family: inherit;
+  font-size: .8rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: auto;
+}
+.bulk-delete-btn:hover { opacity: 0.85; }
+
+
+/* ===== FEATURE 9: MULTI-SORT BADGES ===== */
+.sort-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: .6rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--blue);
+  border-radius: 50%;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+
+/* ===== FEATURE 10: COLUMN DRAG REORDER ===== */
+.data-table th.col-drag-over {
+  border-left: 3px solid var(--blue);
+}
+.data-table th[draggable="true"] {
+  cursor: grab;
+}
+.data-table th.col-dragging {
+  opacity: 0.4;
+}
+
+
+/* ===== FEATURE 11: COLUMN FILTER ===== */
+.col-filter-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  cursor: pointer;
+  color: var(--grey-txt);
+  opacity: 0.3;
+  transition: opacity .15s, color .15s;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.col-filter-icon:hover { opacity: 1; color: var(--blue); }
+.col-filter-icon.active { opacity: 1; color: var(--blue); }
+.col-filter-dropdown {
+  position: fixed;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  z-index: 9000;
+  min-width: 200px;
+  max-width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+  font-size: .82rem;
+  animation: ctxFadeIn .1s ease;
+}
+.col-filter-dropdown input[type="text"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: .8rem;
+  color: var(--body-fg);
+  background: var(--bg);
+  outline: none;
+  margin-bottom: 6px;
+}
+.col-filter-dropdown input[type="text"]:focus { border-color: var(--blue); }
+.col-filter-dropdown .cf-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background .1s;
+  font-size: .8rem;
+}
+.col-filter-dropdown .cf-item:hover { background: var(--row-hover); }
+.col-filter-dropdown .cf-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--blue);
+  flex-shrink: 0;
+}
+.col-filter-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.col-filter-actions button {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--body-fg);
+  font-family: inherit;
+  font-size: .75rem;
+  cursor: pointer;
+}
+.col-filter-actions button:hover { border-color: var(--blue); color: var(--blue); }
+
+
+/* ===== FEATURE 12: ROW STRIPING BY GROUP ===== */
+.data-table tr.dt-group-alt > td { background: color-mix(in srgb, var(--blue) 2%, transparent); }
+[data-theme="dark"] .data-table tr.dt-group-alt > td { background: rgba(59,130,246,.03); }
+
+
+/* ===== FEATURE 13: FILL HANDLE ===== */
+.fill-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--blue);
+  border: 1px solid #fff;
+  cursor: crosshair;
+  z-index: 20;
+  pointer-events: auto;
+}
+.fill-handle:hover {
+  transform: scale(1.3);
+}
+.fill-preview-cell {
+  outline: 2px dashed var(--blue) !important;
+  outline-offset: -2px;
+  background: rgba(59,130,246,.06) !important;
+}

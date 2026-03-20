@@ -79,6 +79,9 @@ let currentTab = 'roadmap';
 let undoStack = [];
 const MAX_UNDO = 20;
 let editPanelTaskId = null;
+// Multi-column sort: array of { col: number, dir: 'asc'|'desc' }
+let sortColumns = [];
+// Legacy single-sort aliases (used throughout the codebase)
 let sortCol = null, sortDir = null;
 let saveDebounce = null;
 let isDataEditMode = false;
@@ -122,6 +125,16 @@ let tableScrollMode = false; // false = fit-to-page (auto), true = scroll (fixed
 // --- Keyboard navigation state ---
 let activeCell = null; // { rowIdx, colIdx }
 let cellEditMode = false;
+
+// --- Copy/Paste cells ---
+let _copiedCellValue = null;
+let _copiedCellField = null;
+
+// --- Column drag reorder ---
+let columnOrder = null; // null = default order, array of column IDs when customized
+
+// --- Column filters ---
+let columnFilters = {}; // { colId: { values: Set, search: '' } }
 
 // --- Drag & drop row state ---
 let dragRowId = null;

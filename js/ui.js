@@ -2099,12 +2099,21 @@ function startColResize(e, colId) {
   }
 
   const table = document.getElementById('data-table');
+
+  // Feature 4: Create resize guide line
+  const guide = document.createElement('div');
+  guide.className = 'col-resize-guide';
+  guide.style.left = e.clientX + 'px';
+  document.body.appendChild(guide);
+
   function onMove(ev) {
     const diff = ev.clientX - _resizeStartX;
     const colMinW = (typeof MIN_COL_WIDTHS !== 'undefined' && MIN_COL_WIDTHS[_resizeCol]) || MIN_COLUMN_WIDTH;
     const newW = Math.max(colMinW, _resizeStartW + diff);
     columnWidths[_resizeCol] = newW;
     th.style.width = newW + 'px';
+    // Update guide line position
+    guide.style.left = ev.clientX + 'px';
     // Update table total width so it can grow beyond container
     if (table && tableScrollMode) {
       applyTableLayoutMode();
@@ -2115,6 +2124,8 @@ function startColResize(e, colId) {
     document.removeEventListener('mouseup', onUp);
     document.body.classList.remove('col-resizing');
     document.querySelectorAll('.col-resize-handle.active').forEach(h => h.classList.remove('active'));
+    // Remove guide line
+    guide.remove();
     _resizeCol = null;
     // Suppress the click event that fires right after mouseup on the <th>
     _colResizeJustFinished = true;
@@ -2282,51 +2293,39 @@ function initDragDrop() {
       let insertIdx = targetTask ? allTasks.findIndex(t => t.id === targetTask.id) : allTasks.length;
       if (insertIdx < 0) insertIdx = allTasks.length;
 
-      // Determine new outline based on neighbors
+      // Determine the correct depth for the dragged task at its new position
       const aboveTask = insertIdx > 0 ? allTasks[insertIdx - 1] : null;
       const belowTask = insertIdx < allTasks.length ? allTasks[insertIdx] : null;
 
-      let newOutline;
+      let targetDepth;
       if (indentDelta > 0 && aboveTask) {
         // Indent: become child of above task
-        const parentOutline = aboveTask.outline;
-        const existingChildren = allTasks.filter(t => t.outline.startsWith(parentOutline + '.') && t.depth === aboveTask.depth + 1);
-        const nextNum = existingChildren.length > 0 ? Math.max(...existingChildren.map(c => parseInt(c.outline.split('.').pop()))) + 1 : 1;
-        newOutline = parentOutline + '.' + nextNum;
-      } else if (indentDelta < 0 && draggedTask.parent) {
-        // Outdent: become sibling of parent
-        const grandParent = draggedTask.parent.parent;
-        const parentOutline = grandParent ? grandParent.outline : '';
-        const siblings = allTasks.filter(t => {
-          if (parentOutline) return t.outline.startsWith(parentOutline + '.') && t.depth === grandParent.depth + 1;
-          return t.depth === 1;
-        });
-        const maxNum = siblings.length > 0 ? Math.max(...siblings.map(s => parseInt(s.outline.split('.').pop()))) + 1 : 1;
-        newOutline = parentOutline ? parentOutline + '.' + maxNum : String(maxNum);
+        targetDepth = aboveTask.depth + 1;
+      } else if (indentDelta < 0) {
+        // Outdent: go up one level, but not above depth 1
+        targetDepth = Math.max(1, draggedTask.depth - 1);
       } else {
-        // Same level: sibling of target
+        // Same level move: match the depth of the context
         if (belowTask) {
-          newOutline = belowTask.outline;
+          targetDepth = belowTask.depth;
         } else if (aboveTask) {
-          const parts = aboveTask.outline.split('.');
-          parts[parts.length - 1] = String(parseInt(parts[parts.length - 1]) + 1);
-          newOutline = parts.join('.');
+          targetDepth = aboveTask.depth;
         } else {
-          newOutline = '1';
+          targetDepth = 1;
         }
       }
 
-      // Update outlines of moved tasks
-      const oldOutline = draggedTask.outline;
+      // Adjust depths of moved tasks relative to the dragged task's new depth
+      const depthShift = targetDepth - draggedTask.depth;
       toMove.forEach(t => {
-        t.outline = t.outline.replace(oldOutline, newOutline);
-        t.depth = t.outline.split('.').length;
+        t.depth = t.depth + depthShift;
       });
 
       // Insert at new position
       allTasks.splice(insertIdx, 0, ...toMove);
 
-      // Renumber everything
+      // Recalculate all outlines from depths, then renumber task numbers
+      recalculateAllOutlines();
       renumberAllTaskNumbers();
       rebuildAfterChange();
       renderAll();
@@ -2340,50 +2339,44 @@ function initDragDrop() {
 }
 
 function applyIndentOutdent(task, delta) {
+  const idx = allTasks.indexOf(task);
+
   if (delta > 0) {
-    // Indent: find previous sibling and become its child
-    const idx = allTasks.indexOf(task);
+    // Indent: become child of previous task
     if (idx <= 0) return;
     const prev = allTasks[idx - 1];
     if (prev.depth < task.depth) return; // already a child
-    const newParentOutline = prev.outline;
-    const existingChildren = allTasks.filter(t => t.outline.startsWith(newParentOutline + '.') && t.outline.split('.').length === prev.depth + 1);
-    const nextNum = existingChildren.length > 0 ? Math.max(...existingChildren.map(c => parseInt(c.outline.split('.').pop()))) + 1 : 1;
-    const oldOutline = task.outline;
-    const newOutline = newParentOutline + '.' + nextNum;
 
-    // Update task and children
-    allTasks.forEach(t => {
-      if (t.outline === oldOutline || t.outline.startsWith(oldOutline + '.')) {
-        t.outline = t.outline.replace(oldOutline, newOutline);
-        t.depth = t.outline.split('.').length;
+    // Shift depth of task and its children
+    const oldDepth = task.depth;
+    const newDepth = prev.depth + 1;
+    const depthShift = newDepth - oldDepth;
+
+    // Collect task + children (contiguous tasks with outline starting with task.outline + '.')
+    for (let i = idx; i < allTasks.length; i++) {
+      const t = allTasks[i];
+      if (i === idx || t.outline.startsWith(task.outline + '.')) {
+        t.depth += depthShift;
+      } else {
+        break;
       }
-    });
+    }
   } else if (delta < 0) {
-    // Outdent
+    // Outdent: go up one level
     if (task.depth <= 1) return;
-    const parts = task.outline.split('.');
-    const parentOutline = parts.slice(0, -1).join('.');
-    const grandParentOutline = parts.slice(0, -2).join('.');
-    const oldOutline = task.outline;
 
-    // New outline: next sibling of parent
-    const parentSiblings = allTasks.filter(t => {
-      const tParts = t.outline.split('.');
-      if (grandParentOutline) return t.outline.startsWith(grandParentOutline + '.') && tParts.length === parts.length - 1;
-      return tParts.length === 1;
-    });
-    const maxNum = parentSiblings.length > 0 ? Math.max(...parentSiblings.map(s => parseInt(s.outline.split('.').pop()))) + 1 : 1;
-    const newOutline = grandParentOutline ? grandParentOutline + '.' + maxNum : String(maxNum);
-
-    allTasks.forEach(t => {
-      if (t.outline === oldOutline || t.outline.startsWith(oldOutline + '.')) {
-        t.outline = t.outline.replace(oldOutline, newOutline);
-        t.depth = t.outline.split('.').length;
+    const depthShift = -1;
+    for (let i = idx; i < allTasks.length; i++) {
+      const t = allTasks[i];
+      if (i === idx || t.outline.startsWith(task.outline + '.')) {
+        t.depth += depthShift;
+      } else {
+        break;
       }
-    });
+    }
   }
 
+  recalculateAllOutlines();
   renumberAllTaskNumbers();
   rebuildAfterChange();
   renderAll();
@@ -2901,9 +2894,12 @@ function initKeyboardNav() {
 
 function setActiveCell(rowIdx, colIdx) {
   clearCellHighlights();
+  removeFillHandle();
   activeCell = { rowIdx, colIdx };
   cellEditMode = false;
   highlightActiveCell();
+  // Feature 13: Show fill handle on selected cell
+  if (isDataEditMode) showFillHandle();
 }
 
 function moveActiveCell(dRow, dCol) {
@@ -2940,6 +2936,7 @@ function clearCellHighlights() {
   document.querySelectorAll('.cell-selected,.cell-editing,.row-selected').forEach(el => {
     el.classList.remove('cell-selected', 'cell-editing', 'row-selected');
   });
+  removeFillHandle();
 }
 
 function enterCellEdit() {
@@ -2977,4 +2974,391 @@ function exitCellEdit() {
   }
   clearCellHighlights();
   highlightActiveCell();
+}
+
+
+/* ====================================================================
+   FEATURE 4: COLUMN RESIZE GUIDE LINE
+   ==================================================================== */
+
+// (Added inside startColResize via patching below)
+
+
+/* ====================================================================
+   FEATURE 8: BULK EDIT BAR
+   ==================================================================== */
+
+function showBulkEditBar(visCols) {
+  const bar = document.getElementById('bulk-edit-bar');
+  if (!bar) return;
+  if (selectedRows.size <= 1) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'flex';
+  const countEl = document.getElementById('bulk-edit-count');
+  if (countEl) countEl.textContent = selectedRows.size + ' selected';
+
+  // Populate bucket options
+  const bulkBucket = document.getElementById('bulk-bucket');
+  if (bulkBucket) {
+    const buckets = getAllBuckets();
+    let opts = '<option value="">Set Bucket...</option>';
+    buckets.forEach(b => { if (b) opts += `<option value="${b}">${b}</option>`; });
+    bulkBucket.innerHTML = opts;
+  }
+  // Populate priority options
+  const bulkPriority = document.getElementById('bulk-priority');
+  if (bulkPriority) {
+    let opts = '<option value="">Set Priority...</option>';
+    PRIORITY_OPTIONS.forEach(p => { opts += `<option value="${p}">${p}</option>`; });
+    bulkPriority.innerHTML = opts;
+  }
+  // Populate status options
+  const bulkStatus = document.getElementById('bulk-status');
+  if (bulkStatus) {
+    let opts = '<option value="">Set Status...</option>';
+    STATUS_OPTIONS.forEach(s => { if (s) opts += `<option value="${s}">${s}</option>`; });
+    bulkStatus.innerHTML = opts;
+  }
+}
+
+function bulkEditField(field, value) {
+  if (!value || selectedRows.size === 0) return;
+  snapshotUndo();
+  selectedRows.forEach(id => {
+    const task = allTasks.find(t => t.id === id);
+    if (task) task[field] = value;
+  });
+  reassignColors();
+  rebuildAfterChange();
+  if (currentTab === 'roadmap') renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function bulkDelete() {
+  deleteSelectedTasks();
+}
+
+
+/* ====================================================================
+   FEATURE 10: COLUMN DRAG REORDER
+   ==================================================================== */
+
+let _colDragId = null;
+
+function colDragStart(e, colId) {
+  _colDragId = colId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', colId);
+  const th = e.target.closest('th');
+  if (th) th.classList.add('col-dragging');
+}
+
+function colDragOver(e, colId) {
+  if (!_colDragId || _colDragId === colId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  // Visual indicator
+  const th = e.target.closest('th');
+  // Clear previous indicators
+  document.querySelectorAll('.col-drag-over').forEach(el => el.classList.remove('col-drag-over'));
+  if (th) th.classList.add('col-drag-over');
+}
+
+function colDrop(e, targetColId) {
+  e.preventDefault();
+  document.querySelectorAll('.col-drag-over').forEach(el => el.classList.remove('col-drag-over'));
+  if (!_colDragId || _colDragId === targetColId) return;
+
+  // Build or get the current column order
+  const visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
+  let order = columnOrder ? [...columnOrder] : visCols.map(c => c.id);
+  // Remove dragged column
+  const fromIdx = order.indexOf(_colDragId);
+  if (fromIdx < 0) return;
+  order.splice(fromIdx, 1);
+  // Insert before target
+  const toIdx = order.indexOf(targetColId);
+  if (toIdx < 0) { order.push(_colDragId); }
+  else { order.splice(toIdx, 0, _colDragId); }
+
+  columnOrder = order;
+  _colDragId = null;
+  renderDataTable();
+  scheduleSave();
+}
+
+function colDragEnd(e) {
+  _colDragId = null;
+  document.querySelectorAll('.col-dragging,.col-drag-over').forEach(el => {
+    el.classList.remove('col-dragging', 'col-drag-over');
+  });
+}
+
+
+/* ====================================================================
+   FEATURE 11: COLUMN FILTER DROPDOWN
+   ==================================================================== */
+
+let _colFilterDropdown = null;
+
+function openColumnFilter(e, colId) {
+  closeColumnFilter();
+  const rect = e.target.closest('th').getBoundingClientRect();
+
+  const dropdown = document.createElement('div');
+  dropdown.className = 'col-filter-dropdown';
+  dropdown.id = 'col-filter-dropdown';
+
+  // Gather unique values for this column
+  const values = new Set();
+  allTasks.forEach(t => {
+    let val = '';
+    switch (colId) {
+      case 'name': val = t.name || ''; break;
+      case 'bucket': val = t.bucket || ''; break;
+      case 'priority': val = t.priority || ''; break;
+      case 'status': val = t.status || ''; break;
+      case 'assigned': val = t.assigned || ''; break;
+      case 'labels': val = t.labels.join(', '); break;
+      case 'notes': val = t.notes || ''; break;
+      case 'sprint': val = t.sprint || ''; break;
+      case 'category': val = t.category || ''; break;
+      case 'cost': val = t.cost || ''; break;
+      default: val = String(t[colId] || '');
+    }
+    if (val) values.add(val);
+  });
+
+  const currentFilter = columnFilters[colId] || { values: new Set(), search: '' };
+
+  let html = `<input type="text" placeholder="Search..." value="${currentFilter.search || ''}" id="cf-search-${colId}" oninput="updateColumnFilterSearch('${colId}', this.value)">`;
+  const sortedValues = [...values].sort();
+  sortedValues.forEach(v => {
+    const checked = currentFilter.values && currentFilter.values.has(v) ? 'checked' : '';
+    html += `<label class="cf-item"><input type="checkbox" ${checked} onchange="toggleColumnFilterValue('${colId}', '${esc(v).replace(/'/g, "\\'")}', this.checked)"><span>${esc(v)}</span></label>`;
+  });
+  html += `<div class="col-filter-actions">
+    <button onclick="clearColumnFilter('${colId}')">Clear</button>
+    <button onclick="closeColumnFilter()">Done</button>
+  </div>`;
+
+  dropdown.innerHTML = html;
+  document.body.appendChild(dropdown);
+
+  // Position
+  let x = rect.left;
+  let y = rect.bottom + 4;
+  if (x + 250 > window.innerWidth) x = window.innerWidth - 260;
+  if (y + 300 > window.innerHeight) y = rect.top - 300;
+  dropdown.style.left = x + 'px';
+  dropdown.style.top = y + 'px';
+
+  _colFilterDropdown = dropdown;
+
+  // Close on outside click
+  setTimeout(() => {
+    document.addEventListener('click', _colFilterOutsideClick);
+  }, 0);
+}
+
+function _colFilterOutsideClick(e) {
+  if (_colFilterDropdown && !_colFilterDropdown.contains(e.target) && !e.target.closest('.col-filter-icon')) {
+    closeColumnFilter();
+  }
+}
+
+function closeColumnFilter() {
+  if (_colFilterDropdown) {
+    _colFilterDropdown.remove();
+    _colFilterDropdown = null;
+  }
+  document.removeEventListener('click', _colFilterOutsideClick);
+}
+
+function updateColumnFilterSearch(colId, val) {
+  if (!columnFilters[colId]) columnFilters[colId] = { values: new Set(), search: '' };
+  columnFilters[colId].search = val;
+  renderDataTable();
+}
+
+function toggleColumnFilterValue(colId, val, checked) {
+  if (!columnFilters[colId]) columnFilters[colId] = { values: new Set(), search: '' };
+  if (checked) columnFilters[colId].values.add(val);
+  else columnFilters[colId].values.delete(val);
+  renderDataTable();
+}
+
+function clearColumnFilter(colId) {
+  delete columnFilters[colId];
+  closeColumnFilter();
+  renderDataTable();
+}
+
+
+/* ====================================================================
+   FEATURE 13: CELL COPY-DOWN (FILL HANDLE)
+   ==================================================================== */
+
+let _fillHandle = null;
+let _fillActive = false;
+let _fillStartRow = -1;
+let _fillStartCol = -1;
+let _fillValue = null;
+let _fillField = null;
+
+function showFillHandle() {
+  removeFillHandle();
+  if (!activeCell || !isDataEditMode) return;
+  const tbody = DOM.dtBody;
+  if (!tbody) return;
+  const rows = tbody.querySelectorAll('tr[data-row-idx]');
+  const row = rows[activeCell.rowIdx];
+  if (!row) return;
+  const cell = row.children[activeCell.colIdx];
+  if (!cell) return;
+
+  // Determine if this cell has a fillable value
+  const colAttr = cell.dataset.col;
+  if (!colAttr || colAttr === 'select') return;
+
+  const handle = document.createElement('div');
+  handle.className = 'fill-handle';
+  cell.style.position = 'relative';
+  handle.style.position = 'absolute';
+  handle.style.right = '-4px';
+  handle.style.bottom = '-4px';
+  cell.appendChild(handle);
+  _fillHandle = handle;
+
+  handle.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    _fillActive = true;
+    _fillStartRow = activeCell.rowIdx;
+    _fillStartCol = activeCell.colIdx;
+
+    // Get the value from the task
+    const taskId = parseInt(row.dataset.id);
+    const task = allTasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    _fillField = colAttr;
+    switch (colAttr) {
+      case 'name': _fillValue = task.name; break;
+      case 'bucket': _fillValue = task.bucket; break;
+      case 'priority': _fillValue = task.priority; break;
+      case 'status': _fillValue = task.status; break;
+      case 'assigned': _fillValue = task.assigned; break;
+      case 'notes': _fillValue = task.notes; break;
+      case 'effort': _fillValue = task.effort; break;
+      case 'cost': _fillValue = task.cost; break;
+      case 'sprint': _fillValue = task.sprint; break;
+      case 'category': _fillValue = task.category; break;
+      case 'pct': _fillValue = Math.round(task.percentComplete * 100); break;
+      default: _fillValue = null;
+    }
+
+    document.addEventListener('mousemove', onFillMove);
+    document.addEventListener('mouseup', onFillUp);
+  });
+}
+
+function onFillMove(e) {
+  if (!_fillActive) return;
+  const tbody = DOM.dtBody;
+  const rows = tbody.querySelectorAll('tr[data-row-idx]');
+  // Clear previous previews
+  tbody.querySelectorAll('.fill-preview-cell').forEach(c => c.classList.remove('fill-preview-cell'));
+
+  // Find which row the mouse is over
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      // Highlight cells from start to current
+      const minR = Math.min(_fillStartRow, i);
+      const maxR = Math.max(_fillStartRow, i);
+      for (let r = minR; r <= maxR; r++) {
+        if (r === _fillStartRow) continue;
+        const cell = rows[r]?.children[_fillStartCol];
+        if (cell) cell.classList.add('fill-preview-cell');
+      }
+      break;
+    }
+  }
+}
+
+function onFillUp(e) {
+  document.removeEventListener('mousemove', onFillMove);
+  document.removeEventListener('mouseup', onFillUp);
+  if (!_fillActive || _fillValue === null || !_fillField) {
+    _fillActive = false;
+    return;
+  }
+
+  const tbody = DOM.dtBody;
+  const rows = tbody.querySelectorAll('tr[data-row-idx]');
+  // Find target row
+  let targetRow = _fillStartRow;
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+      targetRow = i;
+      break;
+    }
+  }
+
+  if (targetRow !== _fillStartRow) {
+    snapshotUndo();
+    const minR = Math.min(_fillStartRow, targetRow);
+    const maxR = Math.max(_fillStartRow, targetRow);
+    for (let r = minR; r <= maxR; r++) {
+      if (r === _fillStartRow) continue;
+      const tr = rows[r];
+      if (!tr) continue;
+      const taskId = parseInt(tr.dataset.id);
+      const task = allTasks.find(t => t.id === taskId);
+      if (!task) continue;
+
+      switch (_fillField) {
+        case 'name': task.name = _fillValue; break;
+        case 'bucket': task.bucket = _fillValue; break;
+        case 'priority': task.priority = _fillValue; break;
+        case 'status': task.status = _fillValue; break;
+        case 'assigned': task.assigned = _fillValue; break;
+        case 'notes': task.notes = _fillValue; break;
+        case 'effort': task.effort = _fillValue; break;
+        case 'cost': task.cost = _fillValue; break;
+        case 'sprint': task.sprint = _fillValue; break;
+        case 'category': task.category = _fillValue; break;
+        case 'pct': {
+          const isLeaf = !task.children || task.children.length === 0;
+          if (isLeaf) {
+            task.percentComplete = Math.max(0, Math.min(100, parseInt(_fillValue) || 0)) / 100;
+            task.manualProgress = true;
+          }
+          break;
+        }
+      }
+    }
+    rebuildAfterChange();
+    if (currentTab === 'roadmap') renderAll();
+    if (currentTab === 'dati') renderDataTable();
+    scheduleSave();
+  }
+
+  // Cleanup
+  tbody.querySelectorAll('.fill-preview-cell').forEach(c => c.classList.remove('fill-preview-cell'));
+  _fillActive = false;
+  _fillValue = null;
+  _fillField = null;
+}
+
+function removeFillHandle() {
+  if (_fillHandle) {
+    _fillHandle.remove();
+    _fillHandle = null;
+  }
 }

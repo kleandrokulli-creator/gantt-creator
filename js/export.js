@@ -848,16 +848,16 @@ async function doHTMLExport(btnEl) {
 
   try {
     // Load source files for self-contained HTML export
-    // Strategy: localStorage cache -> HTTP fetch -> sync XHR -> DOM extraction (CSS only)
-    const SRC_VERSION = 'v21';
+    // Strategy: Storage cache -> HTTP fetch -> sync XHR -> DOM extraction (CSS only)
+    const SRC_VERSION = 'v22';
 
     async function loadSource(filename) {
       const cacheKey = 'planview-src-' + filename;
       const versionKey = 'planview-src-version';
-      // Check localStorage cache (only if version matches)
-      const cachedVersion = localStorage.getItem(versionKey);
+      // Check cache (only if version matches)
+      const cachedVersion = AppStorage.getCacheItem(versionKey);
       if (cachedVersion === SRC_VERSION) {
-        const cached = localStorage.getItem(cacheKey);
+        const cached = AppStorage.getCacheItem(cacheKey);
         if (cached) return cached;
       }
       // Try HTTP fetch
@@ -865,8 +865,8 @@ async function doHTMLExport(btnEl) {
         const r = await fetch('js/' + filename + '?t=' + Date.now());
         if (r.ok) {
           const t = await r.text();
-          localStorage.setItem(cacheKey, t);
-          localStorage.setItem(versionKey, SRC_VERSION);
+          AppStorage.setCacheItem(cacheKey, t);
+          AppStorage.setCacheItem(versionKey, SRC_VERSION);
           return t;
         }
       } catch(e) {}
@@ -876,13 +876,13 @@ async function doHTMLExport(btnEl) {
         xhr.open('GET', 'js/' + filename, false);
         xhr.send();
         if (xhr.responseText) {
-          localStorage.setItem(cacheKey, xhr.responseText);
-          localStorage.setItem(versionKey, SRC_VERSION);
+          AppStorage.setCacheItem(cacheKey, xhr.responseText);
+          AppStorage.setCacheItem(versionKey, SRC_VERSION);
           return xhr.responseText;
         }
       } catch(e) {}
       // Last resort: return stale cache if any
-      const stale = localStorage.getItem(cacheKey);
+      const stale = AppStorage.getCacheItem(cacheKey);
       if (stale) return stale;
       return '';
     }
@@ -900,7 +900,7 @@ async function doHTMLExport(btnEl) {
       if (css) return css;
       // Fallback: try cache or fetch
       const cacheKey = 'planview-src-style.css';
-      const cached = localStorage.getItem(cacheKey);
+      const cached = AppStorage.getCacheItem(cacheKey);
       if (cached) return cached;
       return '';
     }

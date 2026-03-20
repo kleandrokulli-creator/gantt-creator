@@ -1048,9 +1048,9 @@ body { padding-top: 0; }
     <button onclick="setZoom('month')" id="zoom-month" class="active">Month</button>
     <button onclick="setZoom('week')" id="zoom-week">Week</button>
     <button onclick="setZoom('day')" id="zoom-day">Day</button>
-    <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" title="Toggle working days (Mon-Fri) / calendar days">
+    <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" title="Toggle working days / calendar days">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
-      <span>Mon-Fri</span>
+      <span>Working Days</span>
     </button>
     <div class="sep"></div>
     <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">

@@ -847,45 +847,66 @@ async function doHTMLExport(btnEl) {
   btnEl.disabled = true;
 
   try {
-    // Load all source files for self-contained HTML export
-    // Try localStorage cache first, then HTTP, then sync XHR
+    // Load source files for self-contained HTML export
+    // Strategy: localStorage cache -> HTTP fetch -> sync XHR -> DOM extraction (CSS only)
+    const SRC_VERSION = 'v21';
+
     async function loadSource(filename) {
       const cacheKey = 'planview-src-' + filename;
-      // Try localStorage cache
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) return cached;
-      // Try HTTP
+      const versionKey = 'planview-src-version';
+      // Check localStorage cache (only if version matches)
+      const cachedVersion = localStorage.getItem(versionKey);
+      if (cachedVersion === SRC_VERSION) {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) return cached;
+      }
+      // Try HTTP fetch
       try {
         const r = await fetch('js/' + filename + '?t=' + Date.now());
-        if (r.ok) { const t = await r.text(); localStorage.setItem(cacheKey, t); return t; }
+        if (r.ok) {
+          const t = await r.text();
+          localStorage.setItem(cacheKey, t);
+          localStorage.setItem(versionKey, SRC_VERSION);
+          return t;
+        }
       } catch(e) {}
-      // Try sync XHR (last resort)
+      // Try sync XHR (works on some browsers with file://)
       try {
         const xhr = new XMLHttpRequest();
         xhr.open('GET', 'js/' + filename, false);
         xhr.send();
-        if (xhr.responseText) { localStorage.setItem(cacheKey, xhr.responseText); return xhr.responseText; }
+        if (xhr.responseText) {
+          localStorage.setItem(cacheKey, xhr.responseText);
+          localStorage.setItem(versionKey, SRC_VERSION);
+          return xhr.responseText;
+        }
       } catch(e) {}
+      // Last resort: return stale cache if any
+      const stale = localStorage.getItem(cacheKey);
+      if (stale) return stale;
       return '';
     }
-    async function loadCSS() {
+
+    function loadCSS() {
+      // Primary: extract from loaded stylesheets in the DOM (always works)
+      let css = '';
+      for (const sheet of document.styleSheets) {
+        try {
+          if (sheet.href && !sheet.href.includes('fonts.googleapis.com')) {
+            for (const rule of sheet.cssRules) css += rule.cssText + '\n';
+          }
+        } catch(e) {}
+      }
+      if (css) return css;
+      // Fallback: try cache or fetch
       const cacheKey = 'planview-src-style.css';
       const cached = localStorage.getItem(cacheKey);
       if (cached) return cached;
-      try {
-        const r = await fetch('css/style.css?t=' + Date.now());
-        if (r.ok) { const t = await r.text(); localStorage.setItem(cacheKey, t); return t; }
-      } catch(e) {}
-      // Fallback: extract from loaded stylesheets
-      let css = '';
-      for (const sheet of document.styleSheets) {
-        try { for (const rule of sheet.cssRules) css += rule.cssText + '\n'; } catch(e) {}
-      }
-      return css;
+      return '';
     }
 
-    const [cssText, stateJs, utilsJs, dataJs, renderJs] = await Promise.all([
-      loadCSS(),
+    const cssText = loadCSS();
+    const [stateJs, utilsJs, dataJs, renderJs] = await Promise.all([
       loadSource('state.js'),
       loadSource('utils.js'),
       loadSource('data.js'),
@@ -893,7 +914,7 @@ async function doHTMLExport(btnEl) {
     ]);
 
     if (!stateJs && !renderJs) {
-      throw new Error('Could not load source files. Open the app from GitHub Pages first (https://kleandrokulli-creator.github.io/gantt-creator/) to cache the sources, then export will work from file:// too.');
+      throw new Error('Could not load source files.\n\nIf you opened this page from a local file (file://), try serving it via a local web server first:\n  python -m http.server 8000\nThen open http://localhost:8000 and export from there.');
     }
 
     // Build selected L1 outlines for prefix matching
@@ -928,9 +949,16 @@ async function doHTMLExport(btnEl) {
 
     const projectName = projects[currentProjectId]?.name || 'Roadmap';
 
+    // Compute actual max depth in filtered data for depth selector
+    const exportMaxDepth = filteredTasks.reduce((mx, t) => {
+      const d = (t.outline || '1').split('.').length;
+      return d > mx ? d : mx;
+    }, 1);
+
     const html = _buildStandaloneHTML({
       cssText, stateJs, utilsJs, dataJs, renderJs,
-      stateData, projectName, taskCount: filteredTasks.length
+      stateData, projectName, taskCount: filteredTasks.length,
+      exportMaxDepth, exportDepthLimit: depthVal
     });
 
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
@@ -950,7 +978,7 @@ async function doHTMLExport(btnEl) {
   }
 }
 
-function _buildStandaloneHTML({ cssText, stateJs, utilsJs, dataJs, renderJs, stateData, projectName, taskCount }) {
+function _buildStandaloneHTML({ cssText, stateJs, utilsJs, dataJs, renderJs, stateData, projectName, taskCount, exportMaxDepth, exportDepthLimit }) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1024,10 +1052,16 @@ body { padding-top: 0; }
     </button>
     <div class="sep"></div>
     <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">
-      <option value="1" selected>Level 1</option>
-      <option value="2">Levels 1-2</option>
-      <option value="3">Levels 1-3</option>
-      <option value="0">All levels</option>
+      ${(() => {
+        let opts = '';
+        const md = exportMaxDepth || 3;
+        for (let d = 1; d <= md; d++) {
+          const label = d === 1 ? 'Level 1' : 'Levels 1-' + d;
+          opts += '<option value="' + d + '"' + (d === 1 ? ' selected' : '') + '>' + label + '</option>';
+        }
+        if (md > 1) opts += '<option value="0">All levels</option>';
+        return opts;
+      })()}
     </select>
     <button onclick="toggleMilestoneInline()" id="ms-inline-btn" class="btn-icon" title="MS inline/separate">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>

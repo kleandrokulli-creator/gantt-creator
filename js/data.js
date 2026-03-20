@@ -16,7 +16,8 @@ function serializeTasks() {
     effort: t.effort, isMilestone: t.isMilestone, notes: t.notes || '',
     colorOverride: t.colorOverride || '', manualProgress: t.manualProgress || false,
     assigned: t.assigned || '', status: t.status || '', cost: t.cost || '',
-    sprint: t.sprint || '', category: t.category || ''
+    sprint: t.sprint || '', category: t.category || '',
+    calendarId: t.calendarId || ''
   }));
 }
 
@@ -27,7 +28,8 @@ function deserializeTasks(arr) {
     finish: s.finish ? new Date(s.finish) : null,
     children: [], parent: null, color: DEFAULT_COLOR,
     assigned: s.assigned || '', status: s.status || '', cost: s.cost || '',
-    sprint: s.sprint || '', category: s.category || ''
+    sprint: s.sprint || '', category: s.category || '',
+    calendarId: s.calendarId || ''
   }));
 }
 
@@ -111,6 +113,7 @@ function saveCurrentProjectToStorage() {
     visibleColumns: [...visibleColumns],
     columnWidths: { ...columnWidths },
     tableScrollMode: tableScrollMode,
+    calendars: JSON.parse(JSON.stringify(calendars)),
     workingDaysMode: workingDaysMode
   };
   try {
@@ -155,6 +158,16 @@ function loadProjectById(id) {
     Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
     Object.assign(PRIORITY_COLORS, proj.priorityColors);
   }
+
+  // Restore calendars
+  if (proj.calendars) {
+    calendars = JSON.parse(JSON.stringify(proj.calendars));
+  } else {
+    calendars = {};
+  }
+  if (proj.workingDaysMode !== undefined) workingDaysMode = proj.workingDaysMode;
+  ensureDefaultCalendar();
+  invalidateHolidayCache();
 
   buildTree();
   aggregateParentProgress();
@@ -525,8 +538,10 @@ function recalcDuration(task) {
   if (task.start && task.finish) {
     let days;
     if (workingDaysMode) {
-      days = countWorkingDays(task.start, task.finish);
+      const calId = task.calendarId || getDefaultCalendarId();
+      days = countWorkingDays(task.start, task.finish, calId);
       if (task.isMilestone) days = 0;
+      if (days === 0 && !task.isMilestone) days = 1;
     } else {
       const diffMs = task.finish.getTime() - task.start.getTime();
       const rawDays = Math.round(diffMs / MS_PER_DAY);

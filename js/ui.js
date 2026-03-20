@@ -77,8 +77,11 @@ function openEditPanel(taskId) {
       <input type="date" id="ep-finish" value="${task.finish ? dateToInputStr(task.finish) : ''}">
     </div>
     <div class="ep-field">
-      <label>Duration</label>
-      <input type="text" id="ep-duration" value="${esc(task.duration)}" readonly style="opacity:.7">
+      <label>Duration <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">(${workingDaysMode ? 'working' : 'calendar'} days)</span></label>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="number" id="ep-duration-num" min="0" value="${parseInt(task.duration) || 0}" style="width:70px">
+        <span style="color:var(--grey-txt);font-size:.85rem">days</span>
+      </div>
     </div>
     <div class="ep-field">
       <label>Completion${isParent ? ' <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">(auto-calcolato dai sotto-task)</span>' : ''}</label>
@@ -116,6 +119,10 @@ function openEditPanel(taskId) {
     <div class="ep-field">
       <label>Note</label>
       <textarea id="ep-notes">${esc(task.notes || '')}</textarea>
+    </div>
+    <div class="ep-field">
+      <label>Calendar</label>
+      <select id="ep-calendar">${Object.keys(calendars).map(id => `<option value="${id}" ${id === (task.calendarId || getDefaultCalendarId()) ? 'selected' : ''}>${esc(calendars[id].name)}${calendars[id].isDefault ? ' (default)' : ''}</option>`).join('')}</select>
     </div>
     <div class="ep-field">
       <label>Bar color <span style="font-weight:400;font-size:.7rem;color:var(--grey-txt)">${task.colorOverride ? '(overridden)' : '(automatic)'}</span></label>
@@ -397,13 +404,35 @@ function saveEditPanel() {
       startEl.value = fv;
     }
   }
+  // Check if duration was manually changed
+  const epDurNum = document.getElementById('ep-duration-num');
+  const newDurDays = parseInt(epDurNum.value) || 0;
+  const oldDurDays = parseInt(task.duration) || 0;
+  const durationManuallyChanged = newDurDays !== oldDurDays;
+
   const datesChanged = (newStart?.getTime() !== task.start?.getTime()) || (newFinish?.getTime() !== task.finish?.getTime());
   task.start = newStart;
-  task.finish = newFinish;
-  if (datesChanged) {
-    recalcDuration(task);
+
+  if (durationManuallyChanged && newStart && newDurDays > 0) {
+    // Duration was edited: compute finish from start + duration
+    const calId = task.calendarId || getDefaultCalendarId();
+    if (workingDaysMode) {
+      task.finish = addWorkingDays(newStart, newDurDays, calId);
+    } else {
+      task.finish = new Date(newStart.getTime() + newDurDays * MS_PER_DAY);
+    }
+    task.duration = newDurDays + (newDurDays === 1 ? ' day' : ' days');
+    // Update the finish date picker in the panel
+    const finishEl = document.getElementById('ep-finish');
+    if (finishEl) finishEl.value = dateToInputStr(task.finish);
     propagateDependencies(task);
-    document.getElementById('ep-duration').value = task.duration;
+  } else {
+    task.finish = newFinish;
+    if (datesChanged) {
+      recalcDuration(task);
+      propagateDependencies(task);
+      if (epDurNum) epDurNum.value = parseInt(task.duration) || 0;
+    }
   }
   const rawPct = parseInt(document.getElementById('ep-pct').value) || 0;
   const manualPct = Math.max(0, Math.min(100, rawPct)) / 100;
@@ -435,6 +464,17 @@ function saveEditPanel() {
   task.effort = document.getElementById('ep-effort').value;
   task.notes = document.getElementById('ep-notes').value;
 
+  // Calendar assignment with child propagation
+  const epCal = document.getElementById('ep-calendar');
+  if (epCal) {
+    const newCalId = epCal.value;
+    if (newCalId !== task.calendarId) {
+      assignCalendarWithChildren(task, newCalId);
+      invalidateHolidayCache();
+      allTasks.forEach(t => recalcDuration(t));
+    }
+  }
+
   // Color override — only set if user actually interacted with the color picker
   const epColor = document.getElementById('ep-color');
   if (epColor) {
@@ -464,12 +504,12 @@ function saveEditPanel() {
     if (updated) {
       const epStart = document.getElementById('ep-start');
       const epFinish = document.getElementById('ep-finish');
-      const epDur = document.getElementById('ep-duration');
+      const epDurNum = document.getElementById('ep-duration-num');
       const epPct = document.getElementById('ep-pct');
       const epPctVal = document.getElementById('ep-pct-val');
       if (epStart && document.activeElement !== epStart && updated.start) epStart.value = dateToInputStr(updated.start);
       if (epFinish && document.activeElement !== epFinish && updated.finish) epFinish.value = dateToInputStr(updated.finish);
-      if (epDur) epDur.value = updated.duration || '';
+      if (epDurNum && document.activeElement !== epDurNum) epDurNum.value = parseInt(updated.duration) || 0;
       // Only refresh slider if user isn't actively dragging it
       if (epPct && document.activeElement !== epPct) {
         const newPct = Math.round(updated.percentComplete * 100);
@@ -570,6 +610,8 @@ function renderSettingsBody() {
       <button class="defaults-btn" onclick="saveGlobalDefaults();this.textContent='Saved!';setTimeout(()=>this.textContent='Save as defaults',1500)">Save as defaults</button>
       <button class="defaults-btn" onclick="resetToBuiltinDefaults()">Reset to factory</button>
     </div>`;
+  } else if (currentSettingsTab === 'calendar') {
+    html = renderCalendarSettingsHTML();
   }
   body.innerHTML = html;
   refreshLegendIfOpen();
@@ -636,6 +678,285 @@ async function addBucket() {
   renderSettingsBody();
   reassignColors(); renderAll();
   scheduleSave();
+}
+
+
+/* ---------- CALENDAR SETTINGS ---------- */
+
+let _selectedCalId = null;
+
+function renderCalendarSettingsHTML() {
+  ensureDefaultCalendar();
+  const calIds = Object.keys(calendars);
+  if (!_selectedCalId || !calendars[_selectedCalId]) _selectedCalId = calIds[0];
+
+  let html = '';
+
+  // Working days toggle
+  html += `<div class="setting-row" style="justify-content:space-between;margin-bottom:12px">
+    <span>Working days mode (Mon-Fri, skip holidays)</span>
+    <label class="toggle-switch">
+      <input type="checkbox" ${workingDaysMode ? 'checked' : ''} onchange="toggleWorkingDaysMode(this.checked)">
+      <span class="toggle-slider"></span>
+    </label>
+  </div>`;
+
+  // Calendar selector chips
+  html += `<div class="cal-chips-row">`;
+  calIds.forEach(id => {
+    const cal = calendars[id];
+    const active = id === _selectedCalId ? 'active' : '';
+    const defBadge = cal.isDefault ? ' (default)' : '';
+    html += `<span class="cal-chip ${active}" style="border-color:${cal.color}" onclick="selectCalendarChip('${id}')">${esc(cal.name)}${defBadge}</span>`;
+  });
+  html += `<span class="cal-chip cal-chip-add" onclick="addCalendar()">+ Add</span>`;
+  html += `</div>`;
+
+  // Selected calendar details
+  const cal = calendars[_selectedCalId];
+  if (cal) {
+    html += `<div class="cal-detail">`;
+    html += `<div class="setting-row" style="gap:8px;margin-bottom:8px">
+      <input type="text" value="${esc(cal.name)}" onchange="renameCalendar('${_selectedCalId}',this.value)" style="flex:1">
+      <input type="color" value="${cal.color}" onchange="changeCalendarColor('${_selectedCalId}',this.value)" class="swatch" title="Calendar color">
+      ${cal.isDefault ? '' : `<button class="del-btn" onclick="setDefaultCalendar('${_selectedCalId}')" title="Set as default" style="font-size:.7rem;padding:2px 6px;background:var(--blue);color:#fff;border:none;border-radius:4px;cursor:pointer">Set Default</button>`}
+      ${calIds.length > 1 ? `<button class="del-btn" onclick="deleteCalendar('${_selectedCalId}')" title="Delete calendar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>` : ''}
+    </div>`;
+
+    // Entries list
+    html += `<div class="cal-entries">`;
+    if (cal.entries.length === 0) {
+      html += `<p class="settings-hint" style="margin:8px 0">No holidays or closures defined.</p>`;
+    }
+    cal.entries.forEach((entry, idx) => {
+      if (entry.type === 'holiday') {
+        html += `<div class="cal-entry">
+          <span class="cal-entry-type">Holiday</span>
+          <span class="cal-entry-dates">${entry.date}</span>
+          <span class="cal-entry-label">${esc(entry.label)}</span>
+          <button class="del-btn" onclick="removeCalendarEntry('${_selectedCalId}',${idx})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>`;
+      } else {
+        html += `<div class="cal-entry">
+          <span class="cal-entry-type">Closure</span>
+          <span class="cal-entry-dates">${entry.startDate} to ${entry.endDate}</span>
+          <span class="cal-entry-label">${esc(entry.label)}</span>
+          <button class="del-btn" onclick="removeCalendarEntry('${_selectedCalId}',${idx})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>`;
+      }
+    });
+    html += `</div>`;
+
+    // Add holiday form
+    html += `<div class="cal-add-form">
+      <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+        <input type="date" id="cal-h-date" style="flex:1">
+        <input type="text" id="cal-h-label" placeholder="Holiday label" style="flex:1">
+        <button class="add-row-btn" onclick="submitCalendarHoliday('${_selectedCalId}')" style="white-space:nowrap">+ Holiday</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:6px">
+        <input type="date" id="cal-c-start" style="flex:1">
+        <span style="color:var(--grey-txt)">to</span>
+        <input type="date" id="cal-c-end" style="flex:1">
+        <input type="text" id="cal-c-label" placeholder="Closure label" style="flex:1">
+        <button class="add-row-btn" onclick="submitCalendarClosure('${_selectedCalId}')" style="white-space:nowrap">+ Closure</button>
+      </div>
+    </div>`;
+
+    html += `</div>`;
+  }
+  return html;
+}
+
+function toggleWorkingDaysMode(checked) {
+  workingDaysMode = checked;
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
+  rebuildAfterChange();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function selectCalendarChip(id) {
+  _selectedCalId = id;
+  renderSettingsBody();
+}
+
+function addCalendar() {
+  const name = prompt('New calendar name:');
+  if (!name || !name.trim()) return;
+  const id = 'cal_' + Date.now();
+  const usedColors = Object.values(calendars).map(c => c.color);
+  const available = CALENDAR_COLORS.filter(c => !usedColors.includes(c));
+  calendars[id] = { name: name.trim(), isDefault: false, entries: [], color: available[0] || CALENDAR_COLORS[Object.keys(calendars).length % CALENDAR_COLORS.length] };
+  _selectedCalId = id;
+  invalidateHolidayCache();
+  renderSettingsBody();
+  scheduleSave();
+}
+
+function renameCalendar(id, newName) {
+  if (!newName.trim()) return;
+  calendars[id].name = newName.trim();
+  renderSettingsBody();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function deleteCalendar(id) {
+  if (Object.keys(calendars).length <= 1) return;
+  if (!confirm('Delete calendar "' + calendars[id].name + '"?')) return;
+  // Move tasks to default
+  const defId = getDefaultCalendarId();
+  allTasks.forEach(t => { if (t.calendarId === id) t.calendarId = defId; });
+  delete calendars[id];
+  ensureDefaultCalendar();
+  _selectedCalId = Object.keys(calendars)[0];
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
+  renderSettingsBody();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function setDefaultCalendar(id) {
+  Object.keys(calendars).forEach(k => calendars[k].isDefault = (k === id));
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
+  renderSettingsBody();
+  renderAll();
+  scheduleSave();
+}
+
+function changeCalendarColor(id, color) {
+  calendars[id].color = color;
+  renderSettingsBody();
+  renderAll();
+  scheduleSave();
+}
+
+function submitCalendarHoliday(calId) {
+  const dateEl = document.getElementById('cal-h-date');
+  const labelEl = document.getElementById('cal-h-label');
+  if (!dateEl.value) { showToast('Select a date', 'error'); return; }
+  calendars[calId].entries.push({ type: 'holiday', date: dateEl.value, label: labelEl.value || 'Holiday' });
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
+  renderSettingsBody();
+  renderAll();
+  scheduleSave();
+}
+
+function submitCalendarClosure(calId) {
+  const startEl = document.getElementById('cal-c-start');
+  const endEl = document.getElementById('cal-c-end');
+  const labelEl = document.getElementById('cal-c-label');
+  if (!startEl.value || !endEl.value) { showToast('Select start and end dates', 'error'); return; }
+  if (startEl.value > endEl.value) { showToast('Start must be before end', 'error'); return; }
+  calendars[calId].entries.push({ type: 'closure', startDate: startEl.value, endDate: endEl.value, label: labelEl.value || 'Closure' });
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
+  renderSettingsBody();
+  renderAll();
+  scheduleSave();
+}
+
+function removeCalendarEntry(calId, idx) {
+  calendars[calId].entries.splice(idx, 1);
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
+  renderSettingsBody();
+  renderAll();
+  scheduleSave();
+}
+
+
+/* ---------- CALENDAR ASSIGNMENT MODAL ---------- */
+
+function openCalendarAssignModal() {
+  ensureDefaultCalendar();
+  const modal = document.getElementById('cal-assign-modal');
+  const body = document.getElementById('cal-assign-body');
+  const calIds = Object.keys(calendars);
+
+  // Get Level 1 and Level 2 tasks
+  const phases = allTasks.filter(t => t.depth <= 2);
+
+  let html = '';
+  if (calIds.length === 0) {
+    html = '<p>No calendars defined. Create one in Settings > Calendar first.</p>';
+  } else if (phases.length === 0) {
+    html = '<p>No tasks to assign calendars to.</p>';
+  } else {
+    // Calendar selector
+    html += `<div style="margin-bottom:12px">
+      <label style="font-weight:600;font-size:.85rem">Select calendar:</label>
+      <select id="cal-assign-select" style="margin-left:8px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);font-size:.85rem">
+        ${calIds.map(id => `<option value="${id}">${esc(calendars[id].name)}${calendars[id].isDefault ? ' (default)' : ''}</option>`).join('')}
+      </select>
+    </div>`;
+
+    // Phase checklist
+    html += `<div style="margin-bottom:12px">
+      <label style="font-weight:600;font-size:.85rem">Apply to phases:</label>
+      <div style="margin-top:4px;display:flex;gap:4px">
+        <button class="add-row-btn" onclick="calAssignSelectAll(true)" style="font-size:.75rem;padding:2px 8px">Select all</button>
+        <button class="add-row-btn" onclick="calAssignSelectAll(false)" style="font-size:.75rem;padding:2px 8px">Deselect all</button>
+      </div>
+    </div>`;
+    html += `<div class="cal-assign-list" style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px">`;
+    phases.forEach(t => {
+      const indent = (t.depth - 1) * 20;
+      const calName = t.calendarId && calendars[t.calendarId] ? calendars[t.calendarId].name : '(default)';
+      html += `<label class="cal-assign-item" style="padding-left:${indent + 8}px">
+        <input type="checkbox" class="cal-assign-cb" value="${t.id}">
+        <span class="cal-assign-outline">${esc(t.outline)}</span>
+        <span class="cal-assign-name">${esc(t.name)}</span>
+        <span class="cal-assign-current" style="color:var(--grey-txt);font-size:.75rem;margin-left:auto">${esc(calName)}</span>
+      </label>`;
+    });
+    html += `</div>`;
+
+    // Apply button
+    html += `<button onclick="applyCalendarAssignment()" style="margin-top:12px;width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:.5rem;cursor:pointer;font-family:inherit;font-weight:600;font-size:.85rem">Apply Calendar</button>`;
+  }
+
+  body.innerHTML = html;
+  modal.classList.add('open');
+}
+
+function closeCalendarAssignModal() {
+  document.getElementById('cal-assign-modal').classList.remove('open');
+}
+
+function calAssignSelectAll(checked) {
+  document.querySelectorAll('.cal-assign-cb').forEach(cb => cb.checked = checked);
+}
+
+function applyCalendarAssignment() {
+  const select = document.getElementById('cal-assign-select');
+  if (!select) return;
+  const calId = select.value;
+  const checked = document.querySelectorAll('.cal-assign-cb:checked');
+  if (checked.length === 0) { showToast('Select at least one phase', 'error'); return; }
+
+  snapshotUndo();
+  checked.forEach(cb => {
+    const taskId = parseInt(cb.value);
+    const task = allTasks.find(t => t.id === taskId);
+    if (task) assignCalendarWithChildren(task, calId);
+  });
+
+  invalidateHolidayCache();
+  allTasks.forEach(t => recalcDuration(t));
+  rebuildAfterChange();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+  closeCalendarAssignModal();
+  showToast(`Calendar assigned to ${checked.length} phase(s)`, 'info', 2000);
 }
 
 

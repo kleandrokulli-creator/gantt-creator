@@ -31,9 +31,9 @@ const MIN_COLUMN_WIDTH = 40;
 const ROW_HEIGHT = 28;
 const DEFAULT_COLUMN_WIDTHS = {
   select:36, taskNum:36, outline:60, name:200, start:115, finish:115,
-  duration:70, milestone:36, labels:120, bucket:100, priority:90,
+  duration:80, milestone:36, labels:120, bucket:100, priority:90,
   pct:120, deps:100, effort:70, notes:140, assigned:100, status:90,
-  cost:70, sprint:70, category:90
+  cost:70, sprint:70, category:90, calendar:110
 };
 
 // Per-column minimum widths — columns can never shrink below these
@@ -41,7 +41,7 @@ const MIN_COL_WIDTHS = {
   select:36, taskNum:32, outline:44, name:100, start:115, finish:115,
   duration:58, milestone:36, labels:50, bucket:60, priority:60,
   pct:90, deps:70, effort:50, notes:50, assigned:60, status:60,
-  cost:50, sprint:50, category:60
+  cost:50, sprint:50, category:60, calendar:60
 };
 
 // Status options for task status dropdowns
@@ -71,10 +71,11 @@ let navStack = [];
 let milestoneInline = true;
 let showArrows = true;
 let currentZoom = 'month';
-let workingDaysMode = false;   // true = show working days durations (Mon-Fri), dim weekends
+let workingDaysMode = false;   // true = working days (Mon-Fri), skip weekends & holidays
 let minDate, maxDate, totalDays, canvasWidth;
 let filteredTree = [];
 let selectedRows = new Set();
+let calendars = {};            // project-level holiday calendars { calId: { name, isDefault, entries[], color } }
 let currentTab = 'roadmap';
 let undoStack = [];
 const MAX_UNDO = 20;
@@ -115,6 +116,7 @@ const ALL_COLUMNS = [
   { id: 'cost',      label: 'Budget/Cost', defaultVisible: false },
   { id: 'sprint',    label: 'Sprint',      defaultVisible: false },
   { id: 'category',  label: 'Category',    defaultVisible: false },
+  { id: 'calendar',  label: 'Calendar',    defaultVisible: false },
 ];
 let visibleColumns = new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => c.id));
 

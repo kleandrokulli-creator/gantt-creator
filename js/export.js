@@ -38,32 +38,93 @@ function _setExportBusy(btnEl, busy) {
    ==================================================================== */
 
 /**
- * Build a temporary container with gantt + legend (if open) for PNG capture.
- * Returns { el, cleanup } where cleanup() removes the temp container.
+ * Prepare the DOM for PNG capture by expanding the timeline to full width.
+ * Returns { el, cleanup } where cleanup() restores all original styles.
+ *
+ * Instead of cloning (which loses flex layout), we temporarily expand the
+ * actual DOM so html2canvas can capture the full-width timeline at 1:1 scale.
  */
 function _buildPNGCaptureElement() {
   const gantt = document.getElementById('gantt-wrapper');
+  const leftPanel = document.querySelector('.left-panel');
+  const rightPanel = document.querySelector('.right-panel');
+  const timelineBody = document.getElementById('timeline-body');
+  const timelineHeader = document.getElementById('timeline-header');
+  const timelineCanvas = document.getElementById('timeline-canvas');
   const legendBar = document.getElementById('legend-bar');
   const hasLegend = legendBar && legendBar.classList.contains('open');
 
-  if (!hasLegend) return { el: gantt, cleanup: function() {} };
+  // Calculate the full content width
+  const leftW = leftPanel ? leftPanel.offsetWidth : 270;
+  const contentW = timelineCanvas ? parseInt(timelineCanvas.style.width) || timelineCanvas.scrollWidth : canvasWidth || 1200;
+  const fullW = leftW + contentW + 2; // +2 for border
 
-  // Create a temp wrapper containing gantt + legend
-  const wrapper = document.createElement('div');
-  wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;background:#fff;';
-  wrapper.style.width = gantt.offsetWidth + 'px';
+  // Save original styles
+  const saved = {
+    ganttW: gantt.style.width,
+    ganttMaxW: gantt.style.maxWidth,
+    ganttOverflow: gantt.style.overflow,
+    ganttPos: gantt.style.position,
+    rightOverflow: rightPanel ? rightPanel.style.overflow : '',
+    bodyOverflow: timelineBody ? timelineBody.style.overflow : '',
+    headerOverflow: timelineHeader ? timelineHeader.style.overflow : '',
+    bodyScrollLeft: timelineBody ? timelineBody.scrollLeft : 0,
+    headerScrollLeft: timelineHeader ? timelineHeader.scrollLeft : 0,
+  };
 
-  const ganttClone = gantt.cloneNode(true);
-  ganttClone.style.height = gantt.offsetHeight + 'px';
-  wrapper.appendChild(ganttClone);
+  // Expand: remove overflow clipping, set full width
+  gantt.style.width = fullW + 'px';
+  gantt.style.maxWidth = fullW + 'px';
+  gantt.style.overflow = 'visible';
+  if (rightPanel) rightPanel.style.overflow = 'visible';
+  if (timelineBody) { timelineBody.style.overflow = 'visible'; timelineBody.scrollLeft = 0; }
+  if (timelineHeader) { timelineHeader.style.overflow = 'visible'; timelineHeader.scrollLeft = 0; }
 
-  const legendClone = legendBar.cloneNode(true);
-  legendClone.style.maxHeight = 'none';
-  legendClone.style.padding = '8px 12px';
-  wrapper.appendChild(legendClone);
+  // If legend is open, create a wrapper that contains gantt + legend at full width
+  let captureEl = gantt;
+  let wrapper = null;
 
-  document.body.appendChild(wrapper);
-  return { el: wrapper, cleanup: function() { wrapper.remove(); } };
+  if (hasLegend) {
+    wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:absolute;left:-9999px;top:0;width:' + fullW + 'px;background:var(--bg,#fff);';
+
+    // Move the gantt temporarily into the wrapper (keeps live DOM — no clone needed)
+    const ganttParent = gantt.parentNode;
+    const ganttNext = gantt.nextSibling;
+    saved._ganttParent = ganttParent;
+    saved._ganttNext = ganttNext;
+    wrapper.appendChild(gantt);
+
+    // Clone legend (lightweight, no layout issues)
+    const legendClone = legendBar.cloneNode(true);
+    legendClone.style.maxHeight = 'none';
+    legendClone.style.padding = '8px 12px';
+    legendClone.style.width = '100%';
+    wrapper.appendChild(legendClone);
+
+    document.body.appendChild(wrapper);
+    captureEl = wrapper;
+  }
+
+  function cleanup() {
+    // Restore gantt to original position
+    if (wrapper) {
+      if (saved._ganttParent) {
+        if (saved._ganttNext) saved._ganttParent.insertBefore(gantt, saved._ganttNext);
+        else saved._ganttParent.appendChild(gantt);
+      }
+      wrapper.remove();
+    }
+    // Restore styles
+    gantt.style.width = saved.ganttW;
+    gantt.style.maxWidth = saved.ganttMaxW;
+    gantt.style.overflow = saved.ganttOverflow;
+    if (rightPanel) rightPanel.style.overflow = saved.rightOverflow;
+    if (timelineBody) { timelineBody.style.overflow = saved.bodyOverflow; timelineBody.scrollLeft = saved.bodyScrollLeft; }
+    if (timelineHeader) { timelineHeader.style.overflow = saved.headerOverflow; timelineHeader.scrollLeft = saved.headerScrollLeft; }
+  }
+
+  return { el: captureEl, cleanup: cleanup };
 }
 
 async function exportCopyPNG() {
@@ -74,7 +135,10 @@ async function exportCopyPNG() {
   try {
     const canvas = await html2canvas(cap.el, {
       scale: 2, useCORS: true,
-      backgroundColor: '#FFFFFF'
+      backgroundColor: null,                 // transparent → inherits from DOM
+      width: cap.el.scrollWidth,
+      height: cap.el.scrollHeight,
+      windowWidth: cap.el.scrollWidth + 50,  // ensure full width is rendered
     });
     const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -99,7 +163,10 @@ async function exportDownloadPNG() {
   try {
     const canvas = await html2canvas(cap.el, {
       scale: 3, useCORS: true,
-      backgroundColor: '#FFFFFF'
+      backgroundColor: null,
+      width: cap.el.scrollWidth,
+      height: cap.el.scrollHeight,
+      windowWidth: cap.el.scrollWidth + 50,
     });
     const a = document.createElement('a');
     a.download = _exportFileName() + '.png';

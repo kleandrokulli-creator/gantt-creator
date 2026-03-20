@@ -13,6 +13,15 @@ function toggleExportMenu() {
   if (isOpen) {
     closeExportMenu();
   } else {
+    // Position menu using fixed coords so it escapes any overflow:hidden/auto parent
+    const btn = document.querySelector('#export-dropdown > button');
+    if (btn) {
+      const r = btn.getBoundingClientRect();
+      menu.style.position = 'fixed';
+      menu.style.top = (r.bottom + 4) + 'px';
+      menu.style.right = (window.innerWidth - r.right) + 'px';
+      menu.style.left = 'auto';
+    }
     menu.classList.add('open');
     // Clean up any stale listener before adding new one
     if (_exportMenuListener) document.removeEventListener('click', _exportMenuListener);

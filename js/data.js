@@ -272,10 +272,17 @@ async function createNewProject(name) {
   Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
   Object.assign(PRIORITY_COLORS, defaults.priorityColors);
 
+  // Reset calendars for the new project
+  calendars = {};
+  ensureDefaultCalendar();
+  invalidateHolidayCache();
+
   projects[id] = {
     name: trimmed, meta: {}, tasks: [],
     labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
-    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS }
+    priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS },
+    calendars: JSON.parse(JSON.stringify(calendars)),
+    workingDaysMode: workingDaysMode
   };
   currentProjectId = id;
   projectMeta = {};
@@ -372,9 +379,13 @@ async function deleteCurrentProject() {
   if (!await showConfirm('Delete project "' + (projects[currentProjectId]?.name || '') + '"?', { title: 'Delete Project', danger: true, okLabel: 'Delete' })) return;
   delete projects[currentProjectId];
   const remaining = Object.keys(projects);
-  currentProjectId = remaining[0];
-  saveCurrentProjectToStorage();
-  loadProjectById(currentProjectId);
+  // Save the projects list BEFORE changing currentProjectId to avoid
+  // saveCurrentProjectToStorage overwriting the remaining project's data
+  try {
+    localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
+  } catch (e) { console.warn('localStorage save failed:', e); }
+  // Now load the remaining project (this sets currentProjectId and restores its data)
+  loadProjectById(remaining[0]);
 }
 
 
@@ -554,21 +565,30 @@ function recalcDuration(task) {
  * Recalculate finish dates after holidays change.
  * Preserves each leaf task's working-day duration and extends/shrinks
  * the finish date to skip newly added holidays. Then propagates dependencies.
+ * @param {string} [forCalendarId] - If provided, only recalc tasks using this specific calendar.
+ *                                    If omitted, recalcs all tasks (used for global changes like toggling working days mode).
  */
-function recalcFinishDates() {
+function recalcFinishDates(forCalendarId) {
   if (!workingDaysMode) return;
+  const defaultCalId = getDefaultCalendarId();
+  // 1. Extend leaf task finish dates to preserve working-day durations
   allTasks.forEach(task => {
     if (!task.start || task.isMilestone) return;
-    if (task.children && task.children.length > 0) return; // parents aggregate from children
+    if (task.children && task.children.length > 0) return;
     const workDays = parseInt(task.duration) || 0;
     if (workDays <= 0) return;
-    const calId = task.calendarId || getDefaultCalendarId();
+    const calId = task.calendarId || defaultCalId;
+    // If scoped to a specific calendar, skip tasks not using it
+    if (forCalendarId && calId !== forCalendarId) return;
     task.finish = addWorkingDays(task.start, workDays, calId);
     task.duration = workDays + (workDays === 1 ? ' day' : ' days');
   });
+  // 2. Propagate dependencies so downstream tasks shift
   allTasks.forEach(task => {
     if (task.dependsOn) propagateDependencies(task);
   });
+  // 3. Rebuild tree to aggregate parent dates from children
+  rebuildAfterChange();
 }
 
 /** Helper: rebuild all derived data after a change */

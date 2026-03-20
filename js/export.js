@@ -1327,7 +1327,7 @@ function getCurrentScope() {
   const t = allTasks.find(x => x.id === last.taskId);
   return t ? (t.filteredChildren || t.children) : taskTree;
 }
-// countWorkingDays and isWeekend are provided by the embedded utils.js (calendar-aware)
+// countWorkingDays and isWeekend are provided by utils.js (calendar-aware)
 function _smartDatePadding(dMin, dMax) {
   var mn = new Date(dMin), mx = new Date(dMax);
   if (currentZoom === 'day') {
@@ -1424,11 +1424,13 @@ function toggleWorkingDays() {
   workingDaysMode = !workingDaysMode;
   var btn = document.getElementById('working-days-btn');
   if (btn) btn.classList.toggle('active', workingDaysMode);
+  var defaultCalId = typeof getDefaultCalendarId === 'function' ? getDefaultCalendarId() : null;
   allTasks.forEach(function(t) {
     if (t.start && t.finish) {
       var days;
       if (workingDaysMode) {
-        days = countWorkingDays(t.start, t.finish, t.calendarId || getDefaultCalendarId());
+        var calId = t.calendarId || defaultCalId;
+        days = countWorkingDays(t.start, t.finish, calId);
         if (t.isMilestone) days = 0;
       } else {
         var raw = Math.round((t.finish - t.start) / 86400000);

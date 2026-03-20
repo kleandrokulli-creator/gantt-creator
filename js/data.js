@@ -611,7 +611,11 @@ function recalcDuration(task) {
 function recalcFinishDates(forCalendarId) {
   if (!workingDaysMode) return;
   const defaultCalId = getDefaultCalendarId();
+  const taskByNum = new Map();
+  allTasks.forEach(t => taskByNum.set(t.taskNumber, t));
+
   // 1. Extend leaf task finish dates to preserve working-day durations
+  const changedTasks = [];
   allTasks.forEach(task => {
     if (!task.start || task.isMilestone) return;
     if (task.children && task.children.length > 0) return;
@@ -620,15 +624,45 @@ function recalcFinishDates(forCalendarId) {
     const calId = task.calendarId || defaultCalId;
     // If scoped to a specific calendar, skip tasks not using it
     if (forCalendarId && calId !== forCalendarId) return;
+    const oldFinish = task.finish ? task.finish.getTime() : 0;
+    const oldStart = task.start ? task.start.getTime() : 0;
     // Snap start to working day first (in case it now falls on a new holiday)
     task.start = nextWorkingDay(task.start, calId);
     task.finish = addWorkingDays(task.start, workDays, calId);
     task.duration = workDays + (workDays === 1 ? ' day' : ' days');
+    if (task.start.getTime() !== oldStart || task.finish.getTime() !== oldFinish) {
+      changedTasks.push(task);
+    }
   });
-  // 2. Propagate dependencies so downstream tasks shift
+
+  // 2. Apply dependency constraints: for each task with dependencies,
+  //    resolve its predecessors and enforce the constraint.
+  //    Process in outline order (allTasks is already sorted by outline)
+  //    so predecessors are updated before successors.
   allTasks.forEach(task => {
-    if (task.dependsOn) propagateDependencies(task);
+    if (!task.dependsOn) return;
+    const deps = parseDependency(task.dependsOn);
+    let taskChanged = false;
+    for (const dep of deps) {
+      const pred = taskByNum.get(dep.taskNum);
+      if (pred) {
+        const changed = applyDependencyConstraint(task, dep, pred);
+        if (changed) taskChanged = true;
+      }
+    }
+    if (taskChanged) {
+      // Recalculate finish from duration for leaf tasks
+      if (!task.children || task.children.length === 0) {
+        const workDays = parseInt(task.duration) || 0;
+        if (workDays > 0) {
+          const calId = task.calendarId || defaultCalId;
+          task.finish = addWorkingDays(task.start, workDays, calId);
+        }
+      }
+      recalcDuration(task);
+    }
   });
+
   // 3. Rebuild tree to aggregate parent dates from children
   rebuildAfterChange();
 }

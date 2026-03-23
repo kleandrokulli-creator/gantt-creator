@@ -338,13 +338,22 @@ function openDataLabelPicker(cell, taskId) {
     picker.appendChild(tag);
   });
 
-  cell.style.position = 'relative';
-  cell.appendChild(picker);
+  // Position picker as fixed overlay so it's not clipped by table overflow
+  const rect = cell.getBoundingClientRect();
+  picker.style.position = 'fixed';
+  picker.style.left = rect.left + 'px';
+  picker.style.top = rect.bottom + 4 + 'px';
+  // If it would go off-screen bottom, show above
+  document.body.appendChild(picker);
+  const pRect = picker.getBoundingClientRect();
+  if (pRect.bottom > window.innerHeight) {
+    picker.style.top = (rect.top - pRect.height - 4) + 'px';
+  }
 
   // Close on outside click
   setTimeout(() => {
     document.addEventListener('click', function closePicker(e) {
-      if (!picker.contains(e.target)) {
+      if (!picker.contains(e.target) && !cell.contains(e.target)) {
         picker.remove();
         document.removeEventListener('click', closePicker);
       }

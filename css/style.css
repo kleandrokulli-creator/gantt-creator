@@ -493,7 +493,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .cell-tags-edit:hover{background:var(--row-hover)}
 .tag-add-hint{color:var(--grey-txt);font-size:.7rem;opacity:.4;margin-left:2px}
 .cell-tags-edit:hover .tag-add-hint{opacity:.8}
-.dt-label-picker{position:absolute;top:100%;left:0;right:auto;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px;display:flex;flex-wrap:wrap;gap:4px;box-shadow:var(--shadow-lg);min-width:180px;max-width:260px}
+.dt-label-picker{z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px;display:flex;flex-wrap:wrap;gap:4px;box-shadow:var(--shadow-lg);min-width:180px;max-width:260px}
 
 /* ===== COLUMN PICKER ===== */
 .dati-header-actions { display: flex; align-items: center; gap: 8px; position: relative; }

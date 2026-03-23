@@ -79,9 +79,39 @@ function renderSettingsBody() {
     </div>`;
   } else if (currentSettingsTab === 'calendar') {
     html = renderCalendarSettingsHTML();
+  } else if (currentSettingsTab === 'teams') {
+    html = renderTeamSettingsHTML();
   }
   body.innerHTML = html;
   refreshLegendIfOpen();
+}
+
+function renderTeamSettingsHTML() {
+  let html = '<p class="settings-hint" style="margin-bottom:12px">Create functional areas (teams) and add members. Assign members to tasks in the Data Grid or Edit Panel.</p>';
+  const teamEntries = Object.entries(teams);
+  if (teamEntries.length === 0) {
+    html += '<p class="settings-hint">No teams yet.</p>';
+  }
+  teamEntries.forEach(([id, team]) => {
+    html += `<div class="team-block">`;
+    html += `<div class="team-header">`;
+    html += `<input type="color" class="swatch" value="${team.color}" onchange="changeTeamColor('${id}',this.value)">`;
+    html += `<input type="text" value="${esc(team.name)}" class="setting-input" onchange="renameTeam('${id}',this.value)" style="flex:1;font-weight:600">`;
+    html += `<button class="del-btn" onclick="deleteTeam('${id}')" title="Delete team"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
+    html += `</div>`;
+    html += `<div class="team-members">`;
+    team.members.forEach((m, i) => {
+      html += `<div class="team-member-row">`;
+      html += `<input type="text" class="member-name" value="${esc(m)}" onchange="renameTeamMember('${id}','${esc(m)}',this.value)">`;
+      html += `<button class="member-remove" onclick="removeTeamMember('${id}','${esc(m)}')" title="Remove member"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`;
+      html += `</div>`;
+    });
+    html += `</div>`;
+    html += `<button class="team-add-member" onclick="addTeamMember('${id}')">+ Add member</button>`;
+    html += `</div>`;
+  });
+  html += `<div style="margin-top:12px"><button class="add-row-btn" onclick="addTeam()">+ Add team</button></div>`;
+  return html;
 }
 
 function renameLabel(oldName, newName) {
@@ -105,6 +135,89 @@ async function addLabel() {
   if (!name || !name.trim()) return;
   LABEL_COLORS[name.trim()] = '#64748B';
   renderSettingsBody(); scheduleSave();
+}
+
+/* ---------- TEAM CRUD ---------- */
+
+function addTeam() {
+  const id = 'team-' + Date.now();
+  const palette = ['#3B82F6','#22C55E','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316'];
+  const usedColors = Object.values(teams).map(t => t.color);
+  const color = palette.find(c => !usedColors.includes(c)) || palette[0];
+  teams[id] = { name: 'New team', color, members: [] };
+  rebuildTeamColors();
+  renderSettingsBody();
+  scheduleSave();
+}
+
+function renameTeam(teamId, newName) {
+  if (!teams[teamId] || !newName.trim()) return;
+  teams[teamId].name = newName.trim();
+  rebuildTeamColors();
+  populateFilterDropdowns();
+  scheduleSave();
+}
+
+function deleteTeam(teamId) {
+  if (!teams[teamId]) return;
+  const teamMembers = teams[teamId].members;
+  allTasks.forEach(t => {
+    if (t.assigned && t.assigned.length > 0) {
+      t.assigned = t.assigned.filter(m => !teamMembers.includes(m));
+    }
+  });
+  delete teams[teamId];
+  rebuildTeamColors();
+  populateFilterDropdowns();
+  renderSettingsBody();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function changeTeamColor(teamId, color) {
+  if (!teams[teamId]) return;
+  teams[teamId].color = color;
+  rebuildTeamColors();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function addTeamMember(teamId) {
+  if (!teams[teamId]) return;
+  const name = prompt('Member name:');
+  if (!name || !name.trim()) return;
+  teams[teamId].members.push(name.trim());
+  renderSettingsBody();
+  scheduleSave();
+}
+
+function removeTeamMember(teamId, memberName) {
+  if (!teams[teamId]) return;
+  teams[teamId].members = teams[teamId].members.filter(m => m !== memberName);
+  allTasks.forEach(t => {
+    if (t.assigned && t.assigned.length > 0) {
+      t.assigned = t.assigned.filter(m => m !== memberName);
+    }
+  });
+  renderSettingsBody();
+  renderAll();
+  if (currentTab === 'dati') renderDataTable();
+  scheduleSave();
+}
+
+function renameTeamMember(teamId, oldName, newName) {
+  if (!teams[teamId] || !newName.trim()) return;
+  const idx = teams[teamId].members.indexOf(oldName);
+  if (idx >= 0) teams[teamId].members[idx] = newName.trim();
+  allTasks.forEach(t => {
+    if (t.assigned && t.assigned.length > 0) {
+      const i = t.assigned.indexOf(oldName);
+      if (i >= 0) t.assigned[i] = newName.trim();
+    }
+  });
+  scheduleSave();
 }
 
 function renameBucket(oldName, newName) {

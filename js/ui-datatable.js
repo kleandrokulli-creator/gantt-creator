@@ -707,7 +707,7 @@ function initKeyboardNav() {
         else if (field === 'priority') { task.priority = val; }
         else if (field === 'effort') { task.effort = val; }
         else if (field === 'notes') { task.notes = val; }
-        else if (field === 'assigned') { task.assigned = val; }
+        else if (field === 'assigned') { task.assigned = val ? val.split(';').map(s => s.trim()).filter(Boolean) : []; }
         else if (field === 'status') { task.status = val; }
         else if (field === 'cost') { task.cost = val; }
         else if (field === 'sprint') { task.sprint = val; }
@@ -1057,7 +1057,7 @@ function openColumnFilter(e, colId) {
       case 'bucket': val = t.bucket || ''; break;
       case 'priority': val = t.priority || ''; break;
       case 'status': val = t.status || ''; break;
-      case 'assigned': val = t.assigned || ''; break;
+      case 'assigned': val = (t.assigned || []).join(', '); break;
       case 'labels': val = t.labels.join(', '); break;
       case 'notes': val = t.notes || ''; break;
       case 'sprint': val = t.sprint || ''; break;
@@ -1187,7 +1187,7 @@ function showFillHandle() {
       case 'bucket': _fillValue = task.bucket; break;
       case 'priority': _fillValue = task.priority; break;
       case 'status': _fillValue = task.status; break;
-      case 'assigned': _fillValue = task.assigned; break;
+      case 'assigned': _fillValue = [...(task.assigned || [])]; break;
       case 'notes': _fillValue = task.notes; break;
       case 'effort': _fillValue = task.effort; break;
       case 'cost': _fillValue = task.cost; break;
@@ -1263,7 +1263,7 @@ function onFillUp(e) {
         case 'bucket': task.bucket = _fillValue; break;
         case 'priority': task.priority = _fillValue; break;
         case 'status': task.status = _fillValue; break;
-        case 'assigned': task.assigned = _fillValue; break;
+        case 'assigned': task.assigned = Array.isArray(_fillValue) ? [..._fillValue] : []; break;
         case 'notes': task.notes = _fillValue; break;
         case 'effort': task.effort = _fillValue; break;
         case 'cost': task.cost = _fillValue; break;

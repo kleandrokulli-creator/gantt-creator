@@ -361,6 +361,89 @@ function openDataLabelPicker(cell, taskId) {
   }, 0);
 }
 
+/* ---------- DATA TABLE MEMBER PICKER ---------- */
+
+function openDataMemberPicker(cell, taskId) {
+  const old = document.querySelector('.dt-member-picker');
+  if (old) old.remove();
+
+  const task = allTasks.find(t => t.id === taskId);
+  if (!task) return;
+  if (!task.assigned) task.assigned = [];
+
+  const allMembers = getAllTeamMembers();
+  if (allMembers.length === 0) {
+    showToast('No team members yet. Go to Settings > Teams to add members.', 'info', 3000);
+    return;
+  }
+
+  const picker = document.createElement('div');
+  picker.className = 'dt-member-picker';
+
+  // Group members by team
+  const teamGroups = {};
+  allMembers.forEach(m => {
+    if (!teamGroups[m.teamName]) teamGroups[m.teamName] = { color: m.teamColor, members: [] };
+    teamGroups[m.teamName].members.push(m);
+  });
+
+  Object.entries(teamGroups).forEach(([teamName, group]) => {
+    const label = document.createElement('div');
+    label.className = 'mp-team-label';
+    label.textContent = teamName;
+    picker.appendChild(label);
+
+    group.members.forEach(m => {
+      const sel = task.assigned.includes(m.name);
+      const tag = document.createElement('span');
+      tag.className = 'ep-tag' + (sel ? ' selected' : '');
+      tag.textContent = m.name;
+      tag.style.cssText = `background:${m.teamColor}22;color:${m.teamColor};border-color:${sel ? m.teamColor : 'transparent'}`;
+      tag.onclick = function(e) {
+        e.stopPropagation();
+        const idx = task.assigned.indexOf(m.name);
+        if (idx >= 0) task.assigned.splice(idx, 1);
+        else task.assigned.push(m.name);
+        const nowSel = task.assigned.includes(m.name);
+        tag.classList.toggle('selected', nowSel);
+        tag.style.borderColor = nowSel ? m.teamColor : 'transparent';
+        snapshotUndo();
+        // Update cell display
+        const allMem = getAllTeamMembers();
+        const tagsHtml = task.assigned.map(nm => {
+          const info = allMem.find(x => x.name === nm);
+          const c = info ? info.teamColor : '#64748B';
+          return `<span class="tag" style="background:${c}22;color:${c}">${esc(getShortName(nm))}</span>`;
+        }).join('');
+        cell.innerHTML = tagsHtml + '<span class="tag-add-hint">+</span>';
+        if (currentTab === 'roadmap') renderAll();
+        scheduleSave();
+      };
+      picker.appendChild(tag);
+    });
+  });
+
+  // Position as fixed overlay
+  const rect = cell.getBoundingClientRect();
+  picker.style.position = 'fixed';
+  picker.style.left = rect.left + 'px';
+  picker.style.top = rect.bottom + 4 + 'px';
+  document.body.appendChild(picker);
+  const pRect = picker.getBoundingClientRect();
+  if (pRect.bottom > window.innerHeight) {
+    picker.style.top = (rect.top - pRect.height - 4) + 'px';
+  }
+
+  setTimeout(() => {
+    document.addEventListener('click', function closePicker(e) {
+      if (!picker.contains(e.target) && !cell.contains(e.target)) {
+        picker.remove();
+        document.removeEventListener('click', closePicker);
+      }
+    });
+  }, 0);
+}
+
 function saveEditPanel() {
   if (editPanelTaskId === null) return;
   const task = allTasks.find(t => t.id === editPanelTaskId);

@@ -370,6 +370,7 @@ async function doHTMLExport(btnEl) {
       workingDaysMode: workingDaysMode,
       splitBarsMode: splitBarsMode,
       calendars: JSON.parse(JSON.stringify(calendars)),
+      teams: JSON.parse(JSON.stringify(teams)),
       hiddenTasks: [...hiddenTasks],
       expandedSet: [...getState().expandedSet],
       collapsedSet: [...getState().collapsedSet],
@@ -614,6 +615,7 @@ function _buildHTMLInit() {
   splitBarsMode = d.splitBarsMode !== undefined ? d.splitBarsMode : true;
   projectMeta = d.projectMeta || {};
   if (d.calendars) { calendars = d.calendars; invalidateHolidayCache(); }
+  if (d.teams) { teams = d.teams; rebuildTeamColors(); }
   if (d.hiddenTasks) d.hiddenTasks.forEach(function(id) { hiddenTasks.add(id); });
 
   // Restore expand/collapse state
@@ -735,6 +737,28 @@ function switchTab() {}
 function renderDataTable() {}
 function scheduleSave() {}
 function snapshotUndo() {}
+function rebuildTeamColors() {
+  Object.keys(TEAM_COLORS).forEach(function(k) { delete TEAM_COLORS[k]; });
+  Object.values(teams).forEach(function(t) { TEAM_COLORS[t.name] = t.color; });
+}
+function getAllTeamMembers() {
+  var result = [];
+  Object.entries(teams).forEach(function(entry) {
+    var id = entry[0], t = entry[1];
+    t.members.forEach(function(m) { result.push({ name: m, teamId: id, teamName: t.name, teamColor: t.color }); });
+  });
+  return result;
+}
+function getShortName(fullName) {
+  if (!fullName) return '';
+  var parts = fullName.trim().split(/\s+/);
+  if (parts.length < 2) return fullName;
+  return parts[0][0].toUpperCase() + '. ' + parts.slice(1).join(' ');
+}
+function getInitials(fullName) {
+  if (!fullName) return '';
+  return fullName.trim().split(/\s+/).map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+}
 function showToast(msg, type, dur) {
   // Lightweight toast for read-only mode
   var el = document.createElement('div');

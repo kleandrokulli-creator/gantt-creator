@@ -381,10 +381,18 @@ function taskMatchesFilter(task) {
   const search = DOM.searchInput.value.toLowerCase();
   const labelF = DOM.filterLabel.value;
   const bucketF = DOM.filterBucket.value;
+  const teamF = DOM.filterTeam ? DOM.filterTeam.value : '';
   const matchSelf = (t) => {
     if (search && !t.name.toLowerCase().includes(search)) return false;
     if (labelF && !t.labels.includes(labelF)) return false;
     if (bucketF && t.bucket !== bucketF) return false;
+    if (teamF) {
+      const teamObj = Object.values(teams).find(tm => tm.name === teamF);
+      if (teamObj) {
+        const assigned = t.assigned || [];
+        if (!assigned.some(m => teamObj.members.includes(m))) return false;
+      }
+    }
     return true;
   };
   const matchTree = (t) => {
@@ -431,6 +439,7 @@ function switchTab(tab) {
     oldState.filters.search = DOM.searchInput.value;
     oldState.filters.label = DOM.filterLabel.value;
     oldState.filters.bucket = DOM.filterBucket.value;
+    if (DOM.filterTeam) oldState.filters.team = DOM.filterTeam.value;
   }
 
   currentTab = tab;
@@ -438,30 +447,38 @@ function switchTab(tab) {
   // Restore new tab filters and UI controls
   const newState = viewStates[currentTab];
   if (newState) {
-    DOM.searchInput.value = newState.filters.search;
-    DOM.filterLabel.value = newState.filters.label;
-    DOM.filterBucket.value = newState.filters.bucket;
+    DOM.searchInput.value = newState.filters.search || '';
+    DOM.filterLabel.value = newState.filters.label || '';
+    DOM.filterBucket.value = newState.filters.bucket || '';
+    if (DOM.filterTeam) DOM.filterTeam.value = newState.filters.team || '';
     const ds = DOM.depthSelect;
-    if (ds) ds.value = newState.visibleDepth;
+    if (ds && newState.visibleDepth !== undefined) ds.value = newState.visibleDepth;
     const elbl = DOM.expandLabel;
-    if (elbl) elbl.textContent = newState.allExpanded ? 'Collapse' : 'Expand';
+    if (elbl && newState.allExpanded !== undefined) elbl.textContent = newState.allExpanded ? 'Collapse' : 'Expand';
   }
 
   document.querySelectorAll('.tab-bar .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   const gw = DOM.ganttWrapper;
   const dw = DOM.datiWrapper;
+  const ow = DOM.orgWrapper;
+  // Hide all wrappers first
+  gw.classList.remove('active'); gw.classList.add('hidden');
+  dw.classList.remove('active');
+  if (ow) ow.style.display = 'none';
+
   if (tab === 'roadmap') {
     gw.style.opacity = '0';
     gw.classList.add('active'); gw.classList.remove('hidden');
-    dw.classList.remove('active');
     renderAll();
     requestAnimationFrame(() => { gw.style.opacity = '1'; });
-  } else {
+  } else if (tab === 'dati') {
     dw.style.opacity = '0';
-    gw.classList.remove('active'); gw.classList.add('hidden');
     dw.classList.add('active');
     renderDataTable();
     requestAnimationFrame(() => { dw.style.opacity = '1'; });
+  } else if (tab === 'org') {
+    if (ow) { ow.style.display = 'flex'; ow.style.flexDirection = 'column'; }
+    if (typeof renderOrgChart === 'function') renderOrgChart();
   }
 
   const editBtn = document.getElementById('data-edit-btn');

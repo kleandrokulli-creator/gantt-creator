@@ -123,7 +123,7 @@ document.getElementById('dt-body').addEventListener('input', function (e) {
     }
     else if (field === 'effort') { task.effort = el.value; }
     else if (field === 'notes') { task.notes = el.value; }
-    else if (field === 'assigned') { task.assigned = el.value; }
+    else if (field === 'assigned') { task.assigned = el.value ? el.value.split(';').map(s => s.trim()).filter(Boolean) : []; }
     else if (field === 'status') { task.status = el.value; }
     else if (field === 'cost') { task.cost = el.value; }
     else if (field === 'sprint') { task.sprint = el.value; }
@@ -283,7 +283,7 @@ document.addEventListener('keydown', e => {
             case 'bucket': _copiedCellValue = task.bucket; break;
             case 'priority': _copiedCellValue = task.priority; break;
             case 'status': _copiedCellValue = task.status; break;
-            case 'assigned': _copiedCellValue = task.assigned; break;
+            case 'assigned': _copiedCellValue = [...(task.assigned || [])]; break;
             case 'notes': _copiedCellValue = task.notes; break;
             case 'effort': _copiedCellValue = task.effort; break;
             case 'cost': _copiedCellValue = task.cost; break;
@@ -317,7 +317,7 @@ document.addEventListener('keydown', e => {
             case 'bucket': task.bucket = String(_copiedCellValue); applied = true; break;
             case 'priority': task.priority = String(_copiedCellValue); applied = true; break;
             case 'status': task.status = String(_copiedCellValue); applied = true; break;
-            case 'assigned': task.assigned = String(_copiedCellValue); applied = true; break;
+            case 'assigned': task.assigned = Array.isArray(_copiedCellValue) ? [..._copiedCellValue] : []; applied = true; break;
             case 'notes': task.notes = String(_copiedCellValue); applied = true; break;
             case 'effort': task.effort = String(_copiedCellValue); applied = true; break;
             case 'cost': task.cost = String(_copiedCellValue); applied = true; break;

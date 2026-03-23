@@ -495,6 +495,26 @@ function _renderRowGrid(rowH, totalRows) {
   return html;
 }
 
+function _buildBarInitials(task, barW) {
+  const members = task.assigned || [];
+  if (members.length === 0 || barW < 70) return '';
+  const allMembers = typeof getAllTeamMembers === 'function' ? getAllTeamMembers() : [];
+  const maxShow = 3;
+  let html = '<div class="bar-initials">';
+  const toShow = members.slice(0, maxShow);
+  toShow.forEach(m => {
+    const info = allMembers.find(x => x.name === m);
+    const c = info ? info.teamColor : '#64748B';
+    const initials = typeof getInitials === 'function' ? getInitials(m) : m.charAt(0).toUpperCase();
+    html += `<span class="bar-initial" style="background:${c}" title="${esc(m)}">${initials}</span>`;
+  });
+  if (members.length > maxShow) {
+    html += `<span class="bar-initial-more">+${members.length - maxShow}</span>`;
+  }
+  html += '</div>';
+  return html;
+}
+
 function _renderTaskBars(dpx, rowH, offsetRows) {
   let html = '';
   // Task bars — each bar splits using its OWN calendar's holidays (not global scoped set)
@@ -586,10 +606,12 @@ function _renderTaskBars(dpx, rowH, offsetRows) {
         // Single continuous bar (no closures or Month zoom)
         const barW = Math.max(x2 - x1, 4);
         const label = barW > 50 ? task.name : '';
+        const memberInitials = _buildBarInitials(task, barW);
         html += `<div class="tl-bar ${cls}${overdueClass}${mutedCls}" style="left:${x1}px;top:${barY}px;width:${barW}px;height:${barH}px;background:${barBg}"
           onclick="handleBarClick(${task.id},${r.hasChildren})" onmouseenter="showTooltip(event,${task.id})" onmouseleave="hideTooltip()" onmousemove="moveTooltip(event)">
           <div class="bar-progress" style="width:${pct}%"></div>
           ${label ? `<div class="bar-label">${esc(label)}</div>` : ''}
+          ${memberInitials}
         </div>`;
       }
     }
@@ -949,7 +971,16 @@ function _buildDTEditCell(col, t, ctx, bucketsArr) {
     case 'deps': return `<td data-col="deps" class="dep-cell-wrap" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<div class="dep-hover-edit" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}">` : '<div>'}<input type="text" value="${esc(t.dependsOn)}" data-field="dependsOn" data-id="${t.id}" title="${esc(buildDepTooltip(t.dependsOn))}"></div></td>`;
     case 'effort': return `<td data-col="effort"><input type="text" value="${esc(String(t.effort || ''))}" data-field="effort" data-id="${t.id}"></td>`;
     case 'notes': return `<td data-col="notes" title="${esc(t.notes || '')}"><input type="text" value="${esc(t.notes || '')}" data-field="notes" data-id="${t.id}" title="${esc(t.notes || '')}"></td>`;
-    case 'assigned': return `<td data-col="assigned" title="${esc(t.assigned || '')}"><input type="text" value="${esc(t.assigned || '')}" data-field="assigned" data-id="${t.id}" placeholder="..." title="${esc(t.assigned || '')}"></td>`;
+    case 'assigned': {
+      const assignedArr = t.assigned || [];
+      const allMem = typeof getAllTeamMembers === 'function' ? getAllTeamMembers() : [];
+      const assignedTags = assignedArr.map(m => {
+        const info = allMem.find(x => x.name === m);
+        const c = info ? info.teamColor : '#64748B';
+        return `<span class="tag" style="background:${c}22;color:${c}">${esc(typeof getShortName === 'function' ? getShortName(m) : m)}</span>`;
+      }).join('');
+      return `<td data-col="assigned"><div class="cell-tags cell-tags-edit" data-id="${t.id}" onclick="openDataMemberPicker(this,${t.id})">${assignedTags}<span class="tag-add-hint">+</span></div></td>`;
+    }
     case 'status': return `<td data-col="status"><select data-field="status" data-id="${t.id}">${STATUS_OPTIONS.map(s => `<option value="${s}" ${s === (t.status||'') ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></td>`;
     case 'cost': return `<td data-col="cost"><input type="text" value="${esc(t.cost || '')}" data-field="cost" data-id="${t.id}" placeholder="..."></td>`;
     case 'sprint': return `<td data-col="sprint"><input type="text" value="${esc(t.sprint || '')}" data-field="sprint" data-id="${t.id}" placeholder="..."></td>`;
@@ -985,7 +1016,17 @@ function _buildDTReadCell(col, t, ctx) {
     case 'deps': return `<td data-col="deps" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<span class="ro-text dep-hover" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}" title="${esc(buildDepTooltip(t.dependsOn))}">${esc(t.dependsOn)}</span>` : '<span class="ro-text">—</span>'}</td>`;
     case 'effort': return `<td data-col="effort"><span class="ro-text">${esc(String(t.effort || '—'))}</span></td>`;
     case 'notes': return `<td data-col="notes" title="${esc(t.notes || '')}"><span class="ro-text" style="color:var(--grey-txt);font-style:italic" title="${esc(t.notes || '')}">${esc(t.notes || '')}</span></td>`;
-    case 'assigned': return `<td data-col="assigned" title="${esc(t.assigned || '')}"><span class="ro-text" style="color:var(--grey-txt)" title="${esc(t.assigned || '—')}">${esc(t.assigned || '—')}</span></td>`;
+    case 'assigned': {
+      const assignedArr = t.assigned || [];
+      if (assignedArr.length === 0) return `<td data-col="assigned"><span class="ro-text" style="color:var(--grey-txt)">—</span></td>`;
+      const allMem = typeof getAllTeamMembers === 'function' ? getAllTeamMembers() : [];
+      const tags = assignedArr.map(m => {
+        const info = allMem.find(x => x.name === m);
+        const c = info ? info.teamColor : '#64748B';
+        return `<span class="tag" style="background:${c}22;color:${c}">${esc(typeof getShortName === 'function' ? getShortName(m) : m)}</span>`;
+      }).join('');
+      return `<td data-col="assigned"><div class="cell-tags">${tags}</div></td>`;
+    }
     case 'status': return `<td data-col="status">${renderStatusBadge(t.status)}</td>`;
     case 'cost': return `<td data-col="cost"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.cost || '—')}</span></td>`;
     case 'sprint': return `<td data-col="sprint"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.sprint || '—')}</span></td>`;
@@ -1307,7 +1348,7 @@ function applyColumnFilters(tasks, visCols) {
         case 'priority': cellVal = t.priority || ''; break;
         case 'labels': cellVal = t.labels.join(', '); break;
         case 'status': cellVal = t.status || ''; break;
-        case 'assigned': cellVal = t.assigned || ''; break;
+        case 'assigned': cellVal = (t.assigned || []).join(', '); break;
         case 'notes': cellVal = t.notes || ''; break;
         case 'deps': cellVal = t.dependsOn || ''; break;
         case 'effort': cellVal = String(t.effort || ''); break;
@@ -1366,4 +1407,40 @@ function refreshDataTableDOM() {
     if (inputs.effort && document.activeElement !== inputs.effort) inputs.effort.value = String(t.effort || '');
     if (inputs.notes && document.activeElement !== inputs.notes) inputs.notes.value = t.notes || '';
   });
+}
+
+
+/* ---------- ORG CHART ---------- */
+
+function renderOrgChart() {
+  const container = DOM.orgChart;
+  if (!container) return;
+  const teamEntries = Object.entries(teams);
+  if (teamEntries.length === 0) {
+    container.innerHTML = '<div class="org-empty">No teams configured yet.<br>Go to Settings &gt; Teams to create teams and add members.</div>';
+    return;
+  }
+  let html = '';
+  teamEntries.forEach(([id, team]) => {
+    html += `<div class="org-team">`;
+    html += `<div class="org-team-header" style="background:${team.color}18;border-left:4px solid ${team.color}">`;
+    html += `<span class="org-team-name" style="color:${team.color}">${esc(team.name)}</span>`;
+    html += `<span class="org-team-count">${team.members.length} member${team.members.length !== 1 ? 's' : ''}</span>`;
+    html += `</div>`;
+    html += `<div class="org-members">`;
+    if (team.members.length === 0) {
+      html += `<div style="color:var(--grey-txt);font-size:.8rem;padding:8px">No members yet</div>`;
+    }
+    team.members.forEach(m => {
+      const initials = getInitials(m);
+      const taskCount = allTasks.filter(t => (t.assigned || []).includes(m)).length;
+      html += `<div class="org-card">`;
+      html += `<div class="org-avatar" style="background:${team.color}">${initials}</div>`;
+      html += `<div class="org-card-name">${esc(m)}</div>`;
+      html += `<div class="org-card-tasks">${taskCount} task${taskCount !== 1 ? 's' : ''}</div>`;
+      html += `</div>`;
+    });
+    html += `</div></div>`;
+  });
+  container.innerHTML = html;
 }

@@ -16,7 +16,8 @@ function serializeTasks() {
     percentComplete: t.percentComplete, dependents: t.dependents,
     effort: t.effort, isMilestone: t.isMilestone, notes: t.notes || '',
     colorOverride: t.colorOverride || '', manualProgress: t.manualProgress || false,
-    assigned: t.assigned || '', status: t.status || '', cost: t.cost || '',
+    assigned: Array.isArray(t.assigned) ? [...t.assigned] : (t.assigned ? [t.assigned] : []),
+    status: t.status || '', cost: t.cost || '',
     sprint: t.sprint || '', category: t.category || '',
     calendarId: t.calendarId || ''
   }));
@@ -32,7 +33,8 @@ function deserializeTasks(arr) {
     start: s.start ? new Date(s.start) : null,
     finish: s.finish ? new Date(s.finish) : null,
     children: [], parent: null, color: DEFAULT_COLOR,
-    assigned: s.assigned || '', status: s.status || '', cost: s.cost || '',
+    assigned: Array.isArray(s.assigned) ? s.assigned : (s.assigned ? [s.assigned] : []),
+    status: s.status || '', cost: s.cost || '',
     sprint: s.sprint || '', category: s.category || '',
     calendarId: s.calendarId || ''
   }));
@@ -122,6 +124,7 @@ function saveCurrentProjectToStorage() {
     columnWidths: { ...columnWidths },
     tableScrollMode: tableScrollMode,
     calendars: JSON.parse(JSON.stringify(calendars)),
+    teams: JSON.parse(JSON.stringify(teams)),
     workingDaysMode: workingDaysMode,
     splitBarsMode: splitBarsMode
   };
@@ -173,6 +176,14 @@ function loadProjectById(id) {
   } else {
     calendars = {};
   }
+
+  // Restore teams
+  if (proj.teams) {
+    teams = JSON.parse(JSON.stringify(proj.teams));
+  } else {
+    teams = {};
+  }
+  rebuildTeamColors();
   if (proj.workingDaysMode !== undefined) workingDaysMode = proj.workingDaysMode;
   ensureDefaultCalendar();
   invalidateHolidayCache();
@@ -229,7 +240,8 @@ function processLoadedData(data) {
       isMilestone: !!d.isMilestone,
       effort: d.effort || '',
       notes: d.notes || '',
-      assigned: d.assigned || '', status: d.status || '', cost: d.cost || '',
+      assigned: Array.isArray(d.assigned) ? d.assigned : (d.assigned ? [d.assigned] : []),
+      status: d.status || '', cost: d.cost || '',
       sprint: d.sprint || '', category: d.category || ''
     };
   });
@@ -556,6 +568,53 @@ function populateFilterDropdowns() {
   selBucket.innerHTML = '<option value="">All buckets</option>';
   [...labelsSet].sort().forEach(l => selLabel.innerHTML += `<option value="${l}">${l}</option>`);
   [...bucketsSet].sort().forEach(b => selBucket.innerHTML += `<option value="${b}">${b}</option>`);
+
+  // Populate team filter
+  if (DOM.filterTeam) {
+    const teamsSet = new Set();
+    Object.values(teams).forEach(t => teamsSet.add(t.name));
+    DOM.filterTeam.innerHTML = '<option value="">All teams</option>';
+    [...teamsSet].sort().forEach(t => DOM.filterTeam.innerHTML += `<option value="${t}">${t}</option>`);
+  }
+}
+
+/* ---------- TEAM HELPERS ---------- */
+
+/** Rebuild TEAM_COLORS lookup from teams object. */
+function rebuildTeamColors() {
+  Object.keys(TEAM_COLORS).forEach(k => delete TEAM_COLORS[k]);
+  Object.values(teams).forEach(t => { TEAM_COLORS[t.name] = t.color; });
+}
+
+/** Get flat array of all team members with their team info.
+ * @returns {Array<{name:string, teamId:string, teamName:string, teamColor:string}>}
+ */
+function getAllTeamMembers() {
+  const result = [];
+  Object.entries(teams).forEach(([id, t]) => {
+    t.members.forEach(m => result.push({ name: m, teamId: id, teamName: t.name, teamColor: t.color }));
+  });
+  return result;
+}
+
+/** Shorten a full name: "Mario Rossi" -> "M. Rossi", "Anna" -> "Anna".
+ * @param {string} fullName
+ * @returns {string}
+ */
+function getShortName(fullName) {
+  if (!fullName) return '';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length < 2) return fullName;
+  return parts[0][0].toUpperCase() + '. ' + parts.slice(1).join(' ');
+}
+
+/** Get initials from a full name: "Mario Rossi" -> "MR".
+ * @param {string} fullName
+ * @returns {string}
+ */
+function getInitials(fullName) {
+  if (!fullName) return '';
+  return fullName.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
 /**
@@ -1240,7 +1299,7 @@ function exportExcel() {
       fmtExcelDate(t.start), fmtExcelDate(t.finish), t.duration,
       t.labels.join(';'), t.bucket, t.priority,
       t.dependsOn, t.percentComplete, t.dependents, t.effort || '',
-      t.assigned || '', t.status || '', t.cost || '', t.sprint || '', t.category || ''
+      (t.assigned || []).join('; '), t.status || '', t.cost || '', t.sprint || '', t.category || ''
     ]);
   });
   const ws = XLSX.utils.aoa_to_sheet(data);

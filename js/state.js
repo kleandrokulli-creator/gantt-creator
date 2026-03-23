@@ -68,8 +68,9 @@ let projectMeta = {};
 let allTasks = [];
 let taskTree = [];
 const viewStates = {
-  roadmap: { expandedSet: new Set(), collapsedSet: new Set(), allExpanded: false, visibleDepth: 1, filters: { search: '', label: '', bucket: '' } },
-  dati: { expandedSet: new Set(), collapsedSet: new Set(), allExpanded: false, visibleDepth: 0, filters: { search: '', label: '', bucket: '' } }
+  roadmap: { expandedSet: new Set(), collapsedSet: new Set(), allExpanded: false, visibleDepth: 1, filters: { search: '', label: '', bucket: '', team: '' } },
+  dati: { expandedSet: new Set(), collapsedSet: new Set(), allExpanded: false, visibleDepth: 0, filters: { search: '', label: '', bucket: '', team: '' } },
+  org: { filters: { search: '', label: '', bucket: '', team: '' } }
 };
 function getState() { return viewStates[currentTab] || viewStates.roadmap; }
 
@@ -102,7 +103,11 @@ let filteredTree = [];
 let selectedRows = new Set();
 /** @type {Object} Holiday calendars { calId: { name, isDefault, entries[], color } } */
 let calendars = {};
-/** @type {'roadmap'|'dati'} Active tab */
+/** @type {Object} Teams { teamId: { name, color, members[] } } */
+let teams = {};
+/** @type {Object} Derived team color lookup { teamName: '#hex' } */
+const TEAM_COLORS = {};
+/** @type {'roadmap'|'dati'|'org'} Active tab */
 let currentTab = 'roadmap';
 
 /* =====================================================================
@@ -154,7 +159,7 @@ const ALL_COLUMNS = [
   { id: 'deps',      label: 'Dependencies',defaultVisible: true },
   { id: 'effort',    label: 'Effort',      defaultVisible: true },
   { id: 'notes',     label: 'Notes',       defaultVisible: true },
-  { id: 'assigned',  label: 'Assigned To', defaultVisible: false },
+  { id: 'assigned',  label: 'Assigned To', defaultVisible: true },
   { id: 'status',    label: 'Status',      defaultVisible: false },
   { id: 'cost',      label: 'Budget/Cost', defaultVisible: false },
   { id: 'sprint',    label: 'Sprint',      defaultVisible: false },
@@ -275,4 +280,7 @@ function initDOMCache() {
   DOM.fileInput = document.getElementById('file-input');
   DOM.breadcrumb = document.getElementById('breadcrumb');
   DOM.depthSelect = document.getElementById('depth-select');
+  DOM.filterTeam = document.getElementById('filter-team');
+  DOM.orgWrapper = document.getElementById('org-wrapper');
+  DOM.orgChart = document.getElementById('org-chart');
 }

@@ -922,16 +922,15 @@ async function doHTMLExport(btnEl) {
       .filter(t => selectedL1.has(t.id) && t.depth === 1)
       .map(t => t.outline);
 
-    // Filter tasks: must belong to a selected L1 tree AND within depth limit
+    // Filter tasks: must belong to a selected L1 tree
+    // NOTE: depth is only used as initial visual setting, NOT as data filter.
+    // All subtasks are always included so the user can change depth in the exported HTML.
     const allSerialized = serializeTasks();
     const filteredTasks = allSerialized.filter(t => {
       const outline = t.outline || '1';
-      const depth = outline.split('.').length;
       // Check if task belongs to a selected L1 group
       const l1Outline = outline.split('.')[0];
       if (!selectedOutlines.includes(l1Outline)) return false;
-      // Check depth limit
-      if (depthVal > 0 && depth > depthVal) return false;
       return true;
     });
 
@@ -950,7 +949,7 @@ async function doHTMLExport(btnEl) {
       hiddenTasks: [...hiddenTasks],
       expandedSet: [...getState().expandedSet],
       collapsedSet: [...getState().collapsedSet],
-      visibleDepth: getState().visibleDepth,
+      visibleDepth: depthVal > 0 ? depthVal : getState().visibleDepth,
     };
 
     const projectName = projects[currentProjectId]?.name || 'Roadmap';
@@ -1043,7 +1042,7 @@ function _buildHTMLBody(projectName, taskCount, stateData, exportMaxDepth) {
       const label = d === 1 ? 'Level 1' : 'Levels 1-' + d;
       opts += '<option value="' + d + '"' + (d === 1 ? ' selected' : '') + '>' + label + '</option>';
     }
-    if (md > 1) opts += '<option value="0">All levels</option>';
+    opts += '<option value="0">All levels</option>';
     return opts;
   })();
 

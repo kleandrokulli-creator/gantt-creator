@@ -947,6 +947,10 @@ async function doHTMLExport(btnEl) {
       workingDaysMode: workingDaysMode,
       splitBarsMode: splitBarsMode,
       calendars: JSON.parse(JSON.stringify(calendars)),
+      hiddenTasks: [...hiddenTasks],
+      expandedSet: [...getState().expandedSet],
+      collapsedSet: [...getState().collapsedSet],
+      visibleDepth: getState().visibleDepth,
     };
 
     const projectName = projects[currentProjectId]?.name || 'Roadmap';
@@ -1066,6 +1070,10 @@ function _buildHTMLBody(projectName, taskCount, stateData, exportMaxDepth) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
       <span>Working Days</span>
     </button>
+    <button onclick="toggleSplitBars()" id="split-bars-btn" class="btn-icon btn-sm" title="Toggle bar splitting around holidays">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h6M15 12h6"/><rect x="9" y="8" width="6" height="8" rx="1" stroke-dasharray="2 2"/></svg>
+      <span>Split Holidays</span>
+    </button>
     <div class="sep"></div>
     <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">
       ${depthOptions}
@@ -1076,7 +1084,7 @@ function _buildHTMLBody(projectName, taskCount, stateData, exportMaxDepth) {
     </button>
     <button onclick="toggleArrows()" id="arrows-btn" class="btn-icon" title="Toggle dependencies">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-      <span id="arrows-label">Hide Dependencies</span>
+      <span id="arrows-label">Dependencies</span>
     </button>
     <div class="sep"></div>
     <button onclick="scrollToToday()" class="btn-icon">
@@ -1085,7 +1093,7 @@ function _buildHTMLBody(projectName, taskCount, stateData, exportMaxDepth) {
     </button>
     <button onclick="toggleExpandAll()" id="expand-btn" class="btn-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
-      <span id="expand-label">Expand all</span>
+      <span id="expand-label">Expand</span>
     </button>
     <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon" title="Show/hide legend">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
@@ -1183,6 +1191,13 @@ function _buildHTMLInit() {
   splitBarsMode = d.splitBarsMode !== undefined ? d.splitBarsMode : true;
   projectMeta = d.projectMeta || {};
   if (d.calendars) { calendars = d.calendars; invalidateHolidayCache(); }
+  if (d.hiddenTasks) d.hiddenTasks.forEach(function(id) { hiddenTasks.add(id); });
+
+  // Restore expand/collapse state
+  var st = getState();
+  if (d.visibleDepth !== undefined) st.visibleDepth = d.visibleDepth;
+  if (d.expandedSet) d.expandedSet.forEach(function(o) { st.expandedSet.add(o); });
+  if (d.collapsedSet) d.collapsedSet.forEach(function(o) { st.collapsedSet.add(o); });
 
   // Deserialize tasks
   allTasks = (d.tasks || []).map(s => ({
@@ -1206,15 +1221,27 @@ function _buildHTMLInit() {
   if (wdBtn) wdBtn.classList.toggle('active', workingDaysMode);
   const sbBtn = document.getElementById('split-bars-btn');
   if (sbBtn) sbBtn.classList.toggle('active', splitBarsMode);
+  const arBtn = document.getElementById('arrows-btn');
+  if (arBtn) arBtn.classList.toggle('dim', !showArrows);
+
+  // Set depth selector to match exported state
+  const ds = document.getElementById('depth-select');
+  if (ds && d.visibleDepth !== undefined) ds.value = d.visibleDepth;
+
+  // Set zoom buttons
+  document.querySelectorAll('[id^="zoom-"]').forEach(function(b) { b.classList.remove('active'); });
+  var zBtn = document.getElementById('zoom-' + currentZoom);
+  if (zBtn) zBtn.classList.add('active');
 
   renderAll();
 
-  // Scroll sync
+  // Scroll sync (vertical + horizontal header)
   const lb = document.getElementById('left-body');
   const tb = document.getElementById('timeline-body');
+  const th = document.getElementById('timeline-header');
   if (lb && tb) {
-    lb.addEventListener('scroll', () => { tb.scrollTop = lb.scrollTop; });
-    tb.addEventListener('scroll', () => { lb.scrollTop = tb.scrollTop; });
+    tb.addEventListener('scroll', function() { lb.scrollTop = tb.scrollTop; if (th) th.scrollLeft = tb.scrollLeft; });
+    lb.addEventListener('scroll', function() { tb.scrollTop = lb.scrollTop; });
   }
 
   // Panel resizer
@@ -1268,7 +1295,7 @@ function _buildStandaloneHTML({ cssText, stateJs, utilsJs, dataJs, renderJs, sta
 function _getMinimalUICode() {
   // Minimal UI functions needed for the standalone HTML
   return `
-// Read-only UI stubs & navigation functions
+// Read-only UI stubs
 function openEditPanel() {}
 function closeEditPanel() {}
 function saveEditPanel() {}
@@ -1281,6 +1308,63 @@ function insertTaskBelow() {}
 function openDataLabelPicker() {}
 function toggleSelectAll() {}
 function updateShowAllBtn() {}
+function switchTab() {}
+function renderDataTable() {}
+function scheduleSave() {}
+function snapshotUndo() {}
+function showToast(msg, type, dur) {
+  // Lightweight toast for read-only mode
+  var el = document.createElement('div');
+  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1E293B;color:#fff;padding:8px 16px;border-radius:8px;font-size:.8rem;z-index:99999;opacity:0;transition:opacity .2s';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  requestAnimationFrame(function() { el.style.opacity = '1'; });
+  setTimeout(function() { el.style.opacity = '0'; setTimeout(function() { el.remove(); }, 300); }, dur || 2500);
+}
+
+// Holiday tooltip
+var _holidayTipEl;
+function getHolidayTooltipEl() {
+  if (!_holidayTipEl) {
+    _holidayTipEl = document.createElement('div');
+    _holidayTipEl.className = 'holiday-tooltip';
+    document.body.appendChild(_holidayTipEl);
+  }
+  return _holidayTipEl;
+}
+function showHolidayTooltip(e) {
+  var el = e.currentTarget;
+  var infoStr = el.getAttribute('data-holiday-info');
+  var dateLabel = el.getAttribute('data-holiday-date');
+  if (!infoStr) return;
+  var infos = JSON.parse(decodeURIComponent(infoStr));
+  var tip = getHolidayTooltipEl();
+  var html = '<div style="font-weight:600;font-size:.8rem;margin-bottom:4px;color:#334155">' + dateLabel + '</div>';
+  infos.forEach(function(info) {
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">';
+    html += '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:' + info.color + ';flex-shrink:0"></span>';
+    html += '<span style="font-size:.75rem;color:#64748B">' + esc(info.cal) + '</span>';
+    html += '<span style="font-size:.78rem;font-weight:500;color:#1E293B">' + esc(info.label) + '</span>';
+    html += '</div>';
+  });
+  tip.innerHTML = html;
+  tip.classList.add('visible');
+  moveHolidayTooltip(e);
+}
+function moveHolidayTooltip(e) {
+  var tip = getHolidayTooltipEl();
+  var x = e.clientX + 12, y = e.clientY + 12;
+  var rect = tip.getBoundingClientRect();
+  if (x + 220 > window.innerWidth) x = e.clientX - 220;
+  if (y + rect.height > window.innerHeight) y = e.clientY - rect.height - 8;
+  tip.style.left = x + 'px';
+  tip.style.top = y + 'px';
+}
+function hideHolidayTooltip() {
+  getHolidayTooltipEl().classList.remove('visible');
+}
+
+// Task interactions
 function handleTaskRowClick(e, outline, taskId, hasChildren) {
   var arrow = e.target.closest('.arrow');
   if (arrow && !arrow.classList.contains('hidden')) { toggleExpand(outline); }
@@ -1291,6 +1375,8 @@ function toggleTaskVisibility(taskId) {
   renderAll();
 }
 function handleBarClick(id, hasChildren) { if (hasChildren) navigateInto(id); }
+
+// Task tooltip
 let tooltipTimeout;
 function showTooltip(e, id) {
   const task = allTasks.find(x => x.id === id);
@@ -1330,6 +1416,7 @@ function hideTooltip() {
   tooltipTimeout = setTimeout(function() { DOM.tooltip.classList.remove('visible'); }, 100);
 }
 
+// Navigation
 function navigateInto(taskId) {
   const task = allTasks.find(t => t.id === taskId);
   if (!task || !task.children || task.children.length === 0) return;
@@ -1349,7 +1436,8 @@ function getCurrentScope() {
   const t = allTasks.find(x => x.id === last.taskId);
   return t ? (t.filteredChildren || t.children) : taskTree;
 }
-// countWorkingDays and isWeekend are provided by utils.js (calendar-aware)
+
+// Date range
 function _smartDatePadding(dMin, dMax) {
   var mn = new Date(dMin), mx = new Date(dMax);
   if (currentZoom === 'day') {
@@ -1382,12 +1470,44 @@ function getScopeDateRange(scope) {
   return _smartDatePadding(mn, mx);
 }
 
+// Filter (Fix 1: full implementation, not stub)
+function taskMatchesFilter(task) {
+  var search = (document.getElementById('search-input')?.value || '').toLowerCase();
+  var labelF = document.getElementById('filter-label')?.value || '';
+  var bucketF = document.getElementById('filter-bucket')?.value || '';
+  function matchSelf(t) {
+    if (search && t.name.toLowerCase().indexOf(search) === -1) return false;
+    if (labelF && (!t.labels || t.labels.indexOf(labelF) === -1)) return false;
+    if (bucketF && t.bucket !== bucketF) return false;
+    return true;
+  }
+  function matchTree(t) {
+    if (matchSelf(t)) return true;
+    return t.children.some(function(c) { return matchTree(c); });
+  }
+  return matchTree(task);
+}
+function filterTree(nodes) {
+  return nodes.filter(function(n) { return taskMatchesFilter(n); }).map(function(n) {
+    n.filteredChildren = filterTree(n.children);
+    return n;
+  });
+}
+function applyFilters() {
+  var s = (document.getElementById('search-input')?.value || '').toLowerCase();
+  var l = document.getElementById('filter-label')?.value || '';
+  var b = document.getElementById('filter-bucket')?.value || '';
+  getState().filters = { search: s, label: l, bucket: b };
+  renderAll();
+}
+
+// Zoom (Fix 3: renderAll instead of renderTimeline)
 function setZoom(z) {
   currentZoom = z;
-  document.querySelectorAll('[id^="zoom-"]').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById('zoom-' + z);
+  document.querySelectorAll('[id^="zoom-"]').forEach(function(b) { b.classList.remove('active'); });
+  var btn = document.getElementById('zoom-' + z);
   if (btn) btn.classList.add('active');
-  renderTimeline();
+  renderAll();
 }
 function setDepth(v) {
   getState().visibleDepth = parseInt(v) || 1;
@@ -1418,16 +1538,18 @@ function toggleExpandAll() {
     st.collapsedSet.clear();
     st.expandedSet.clear();
     st.allExpanded = true;
-    document.getElementById('expand-label').textContent = 'Collapse all';
+    document.getElementById('expand-label').textContent = 'Collapse';
   } else {
     st.collapsedSet.clear();
     st.expandedSet.clear();
-    allTasks.forEach(t => { if (t.children.length > 0) st.collapsedSet.add(t.outline); });
+    allTasks.forEach(function(t) { if (t.children.length > 0) st.collapsedSet.add(t.outline); });
     st.allExpanded = false;
-    document.getElementById('expand-label').textContent = 'Expand all';
+    document.getElementById('expand-label').textContent = 'Expand';
   }
   renderAll();
 }
+
+// Toggles
 function toggleMilestoneInline() {
   milestoneInline = !milestoneInline;
   const btn = document.getElementById('ms-inline-btn');
@@ -1438,8 +1560,8 @@ function toggleMilestoneInline() {
 }
 function toggleArrows() {
   showArrows = !showArrows;
-  const lbl = document.getElementById('arrows-label');
-  if (lbl) lbl.textContent = showArrows ? 'Hide Dependencies' : 'Show Dependencies';
+  var btn = document.getElementById('arrows-btn');
+  if (btn) btn.classList.toggle('dim', !showArrows);
   renderAll();
 }
 function toggleWorkingDays() {
@@ -1463,28 +1585,26 @@ function toggleWorkingDays() {
   });
   renderAll();
 }
+function toggleSplitBars() {
+  splitBarsMode = !splitBarsMode;
+  var btn = document.getElementById('split-bars-btn');
+  if (btn) btn.classList.toggle('active', splitBarsMode);
+  renderAll();
+}
 function scrollToToday() {
   const tb = document.getElementById('timeline-body');
   const tl = document.querySelector('.tl-today');
   if (tb && tl) tb.scrollLeft = tl.offsetLeft - tb.clientWidth / 2;
 }
 function syncScroll() {
-  const lb = document.getElementById('left-body');
-  const tb = document.getElementById('timeline-body');
-  if (lb && tb) { tb.scrollTop = lb.scrollTop; }
+  var lb = document.getElementById('left-body');
+  var tb = document.getElementById('timeline-body');
+  var th = document.getElementById('timeline-header');
+  if (lb && tb) {
+    tb.onscroll = function() { lb.scrollTop = tb.scrollTop; if (th) th.scrollLeft = tb.scrollLeft; };
+    lb.onscroll = function() { tb.scrollTop = lb.scrollTop; };
+  }
 }
-function filterTree(scope) { return scope; }
-function applyFilters() {
-  const s = document.getElementById('search-input')?.value?.toLowerCase() || '';
-  const l = document.getElementById('filter-label')?.value || '';
-  const b = document.getElementById('filter-bucket')?.value || '';
-  getState().filters = { search: s, label: l, bucket: b };
-  renderAll();
-}
-function switchTab() {}
-function renderDataTable() {}
-function scheduleSave() {}
-function snapshotUndo() {}
 
 // Legend
 var legendOpen = false;

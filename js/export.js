@@ -980,7 +980,7 @@ async function doHTMLExport(btnEl) {
   }
 }
 
-function _buildStandaloneHTML({ cssText, stateJs, utilsJs, dataJs, renderJs, stateData, projectName, taskCount, exportMaxDepth, exportDepthLimit }) {
+function _buildHTMLHead(cssText, projectName) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1028,8 +1028,22 @@ body { padding-top: 0; }
 .legend-item .legend-swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 .legend-item .legend-star{flex-shrink:0;line-height:0}
 </style>
-</head>
-<body>
+</head>`;
+}
+
+function _buildHTMLBody(projectName, taskCount, stateData, exportMaxDepth) {
+  const depthOptions = (() => {
+    let opts = '';
+    const md = exportMaxDepth || 3;
+    for (let d = 1; d <= md; d++) {
+      const label = d === 1 ? 'Level 1' : 'Levels 1-' + d;
+      opts += '<option value="' + d + '"' + (d === 1 ? ' selected' : '') + '>' + label + '</option>';
+    }
+    if (md > 1) opts += '<option value="0">All levels</option>';
+    return opts;
+  })();
+
+  return `<body>
 
 <div id="app-screen">
   <div class="ro-title-bar">
@@ -1054,16 +1068,7 @@ body { padding-top: 0; }
     </button>
     <div class="sep"></div>
     <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">
-      ${(() => {
-        let opts = '';
-        const md = exportMaxDepth || 3;
-        for (let d = 1; d <= md; d++) {
-          const label = d === 1 ? 'Level 1' : 'Levels 1-' + d;
-          opts += '<option value="' + d + '"' + (d === 1 ? ' selected' : '') + '>' + label + '</option>';
-        }
-        if (md > 1) opts += '<option value="0">All levels</option>';
-        return opts;
-      })()}
+      ${depthOptions}
     </select>
     <button onclick="toggleMilestoneInline()" id="ms-inline-btn" class="btn-icon" title="MS inline/separate">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
@@ -1121,9 +1126,11 @@ body { padding-top: 0; }
   <div class="backdrop"></div>
   <div class="edit-panel" id="edit-panel"></div>
 </div>
-<div class="modal-overlay" id="settings-modal" style="display:none"></div>
+<div class="modal-overlay" id="settings-modal" style="display:none"></div>`;
+}
 
-<script>
+function _buildHTMLScripts(stateJs, utilsJs, dataJs, renderJs, stateData) {
+  return `<script>
 // === EMBEDDED DATA ===
 const __EMBEDDED_DATA__ = ${JSON.stringify(stateData)};
 const READ_ONLY = true;
@@ -1147,8 +1154,11 @@ ${renderJs}
 <script>
 // === READ-ONLY UI (minimal) ===
 ${_getMinimalUICode()}
-</script>
-<script>
+</script>`;
+}
+
+function _buildHTMLInit() {
+  return `<script>
 // === INIT ===
 (function() {
   // Initialize DOM cache (required by all render functions)
@@ -1245,6 +1255,14 @@ ${_getMinimalUICode()}
 </script>
 </body>
 </html>`;
+}
+
+function _buildStandaloneHTML({ cssText, stateJs, utilsJs, dataJs, renderJs, stateData, projectName, taskCount, exportMaxDepth, exportDepthLimit }) {
+  const head    = _buildHTMLHead(cssText, projectName);
+  const body    = _buildHTMLBody(projectName, taskCount, stateData, exportMaxDepth);
+  const scripts = _buildHTMLScripts(stateJs, utilsJs, dataJs, renderJs, stateData);
+  const init    = _buildHTMLInit();
+  return `${head}\n${body}\n${scripts}\n${init}`;
 }
 
 function _getMinimalUICode() {

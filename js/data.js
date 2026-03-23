@@ -4,6 +4,7 @@
 
 /* ---------- SERIALIZATION ---------- */
 
+/** Serialize allTasks to a plain JSON-safe array for storage. */
 function serializeTasks() {
   return allTasks.map(t => ({
     id: t.id, taskNumber: t.taskNumber, outline: t.outline, depth: t.depth,
@@ -21,6 +22,10 @@ function serializeTasks() {
   }));
 }
 
+/** Restore tasks from a serialized array, converting ISO strings back to Dates.
+ * @param {Array} arr - Serialized task objects from storage
+ * @returns {Array} Hydrated task objects with Date instances and empty tree pointers
+ */
 function deserializeTasks(arr) {
   return (arr || []).map(s => ({
     ...s,
@@ -36,12 +41,14 @@ function deserializeTasks(arr) {
 
 /* ---------- UNDO SYSTEM ---------- */
 
+/** Save a snapshot of the current task state onto the undo stack. */
 function snapshotUndo() {
   undoStack.push(JSON.stringify(serializeTasks()));
   if (undoStack.length > MAX_UNDO) undoStack.shift();
   scheduleSave();
 }
 
+/** Pop the last undo snapshot and restore all tasks to that state. */
 function undoEdit() {
   if (!undoStack.length) return;
   const snap = JSON.parse(undoStack.pop());
@@ -397,6 +404,9 @@ async function deleteCurrentProject() {
 
 /* ---------- TREE BUILDING ---------- */
 
+/** Build the parent-child tree from flat allTasks using outline numbering.
+ * Populates taskTree (top-level roots), and sets parent/children pointers.
+ */
 function buildTree() {
   taskTree = [];
   const stack = [];
@@ -673,7 +683,9 @@ function recalcFinishDates(forCalendarId) {
   rebuildAfterChange();
 }
 
-/** Helper: rebuild all derived data after a change */
+/** Rebuild all derived data after a task change: tree structure,
+ * parent progress aggregation, label colors, date range, and filter dropdowns.
+ */
 function rebuildAfterChange() {
   buildTree();
   // Clear stale manualProgress on parent tasks so aggregation always works
@@ -804,6 +816,9 @@ function parseCSV(text, delimiter) {
   computeDateRange();
 }
 
+/** Parse an Excel file (xlsx/xls) into allTasks via SheetJS.
+ * @param {Uint8Array} data - Raw file bytes from FileReader
+ */
 function parseExcel(data) {
   const wb = XLSX.read(data, { type: 'array', cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];

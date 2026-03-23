@@ -1,10 +1,15 @@
 /* ===================================================================
-   STATE.JS — Global state variables and configuration constants
+   STATE.JS — Global state variables and configuration constants.
+   All mutable state lives here for easy auditing.
+   File count: ~77 variables across 8 categories.
    =================================================================== */
 
-// ===== CONSTANTS =====
 
-// Time
+/* =====================================================================
+   1. CONSTANTS — immutable values used throughout the app
+   ===================================================================== */
+
+/** Milliseconds in a day (used for date arithmetic) */
 const MS_PER_DAY = 86400000;
 const DEFAULT_TASK_DURATION_DAYS = 7;
 
@@ -54,9 +59,11 @@ const EXCEL_DATA_START = 9;
 // Dependency types
 const DEP_TYPES = { FS:'FS', SS:'SS', FF:'FF', SF:'SF' };
 
-// ===== MUTABLE STATE =====
+/* =====================================================================
+   2. PROJECT & TASK DATA — core data model
+   ===================================================================== */
 
-// --- Project & task state ---
+/** @type {Object} Project metadata from Excel (projectName, creator, dates, etc.) */
 let projectMeta = {};
 let allTasks = [];
 let taskTree = [];
@@ -66,37 +73,71 @@ const viewStates = {
 };
 function getState() { return viewStates[currentTab] || viewStates.roadmap; }
 
+/* =====================================================================
+   3. VIEW STATE — display, zoom, filters, navigation
+   ===================================================================== */
+
+/** @type {Set<number>} Task IDs hidden (muted) by the user */
 let hiddenTasks = new Set();
+/** @type {Array<number>} Breadcrumb navigation stack (task IDs) */
 let navStack = [];
+/** @type {boolean} Show milestones inline on task bars vs separate rows */
 let milestoneInline = true;
+/** @type {boolean} Show dependency arrows between tasks */
 let showArrows = true;
+/** @type {'month'|'week'|'day'} Current zoom level */
 let currentZoom = 'month';
-let workingDaysMode = false;   // true = working days (Mon-Fri), skip weekends & holidays
-let splitBarsMode = true;      // true = bars split around holidays, false = continuous bars
-let minDate, maxDate, totalDays, canvasWidth;
+/** @type {boolean} true = count only Mon-Fri, skip weekends & holidays */
+let workingDaysMode = false;
+/** @type {boolean} true = bars split around holidays, false = continuous bars */
+let splitBarsMode = true;
+/** @type {Date} Earliest date in timeline (computed) */
+let minDate;
+/** @type {Date} Latest date in timeline (computed) */
+let maxDate;
+let totalDays, canvasWidth;
+/** @type {Array} Filtered task tree (after search/label/bucket filters) */
 let filteredTree = [];
+/** @type {Set<number>} Currently selected row IDs (for bulk operations) */
 let selectedRows = new Set();
-let calendars = {};            // project-level holiday calendars { calId: { name, isDefault, entries[], color } }
+/** @type {Object} Holiday calendars { calId: { name, isDefault, entries[], color } } */
+let calendars = {};
+/** @type {'roadmap'|'dati'} Active tab */
 let currentTab = 'roadmap';
+
+/* =====================================================================
+   4. UNDO & PERSISTENCE
+   ===================================================================== */
+
 let undoStack = [];
 const MAX_UNDO = 20;
-let editPanelTaskId = null;
-// Multi-column sort: array of { col: number, dir: 'asc'|'desc' }
-let sortColumns = [];
-// Legacy single-sort aliases (used throughout the codebase)
-let sortCol = null, sortDir = null;
 let saveDebounce = null;
 let pendingInlineSave = null;
-let isDataEditMode = false;
 let autoSaveDebounce = null;
-let currentSettingsTab = 'labels';
-let visibleRows = [];
 
-// --- Custom buckets (not derived from tasks) ---
+/* =====================================================================
+   5. UI STATE — panels, modals, edit mode
+   ===================================================================== */
+
+/** @type {number|null} Task ID currently open in the edit panel */
+let editPanelTaskId = null;
+/** @type {boolean} Data table inline-edit mode active */
+let isDataEditMode = false;
+/** @type {string} Active tab in settings modal */
+let currentSettingsTab = 'labels';
+/** @type {Array} Flat list of currently visible task rows */
+let visibleRows = [];
+/** @type {Array<{col:number, dir:'asc'|'desc'}>} Multi-column sort state */
+let sortColumns = [];
+/** Legacy single-sort aliases (used throughout the codebase) */
+let sortCol = null, sortDir = null;
+
+/** @type {Set<string>} Manually-added bucket names (not derived from tasks) */
 let customBuckets = new Set();
 
-// --- Column visibility (Data Table) ---
-// Key = column id, value = { label, visible, width? }
+/* =====================================================================
+   6. DATA TABLE — columns, widths, keyboard nav, drag & drop
+   ===================================================================== */
 const ALL_COLUMNS = [
   { id: 'select',    label: '',            defaultVisible: true,  alwaysOn: true },
   { id: 'taskNum',   label: '#',           defaultVisible: true },
@@ -126,35 +167,44 @@ let visibleColumns = new Set(ALL_COLUMNS.filter(c => c.defaultVisible).map(c => 
 let columnWidths = {}; // { colId: px }
 let tableScrollMode = false; // false = fit-to-page (auto), true = scroll (fixed widths)
 
-// --- Keyboard navigation state ---
-let activeCell = null; // { rowIdx, colIdx }
+/** @type {{rowIdx:number, colIdx:number}|null} Active cell for keyboard navigation */
+let activeCell = null;
+/** @type {boolean} Cell is in edit mode (typing replaces content) */
 let cellEditMode = false;
-
-// --- Copy/Paste cells ---
+/** @type {*} Clipboard: copied cell value */
 let _copiedCellValue = null;
+/** @type {string|null} Clipboard: field name of copied cell */
 let _copiedCellField = null;
+/** @type {Array<string>|null} Custom column order (null = default) */
+let columnOrder = null;
+/** @type {Object} Per-column filter state { colId: { values: Set, search: '' } } */
+let columnFilters = {};
 
-// --- Column drag reorder ---
-let columnOrder = null; // null = default order, array of column IDs when customized
+/* =====================================================================
+   7. DRAG & DROP — row reordering state
+   ===================================================================== */
 
-// --- Column filters ---
-let columnFilters = {}; // { colId: { values: Set, search: '' } }
-
-// --- Drag & drop row state ---
 let dragRowId = null;
 let dragGhost = null;
 let dragIndicator = null;
 let dragStartX = 0;
 
-// --- Multi-project state ---
-let projects = {};
-let currentProjectId = null;
+/* =====================================================================
+   8. MULTI-PROJECT & EXCEL IMPORT
+   ===================================================================== */
 
-// --- Parsed Excel data (preserved for re-export) ---
+/** @type {Object} All projects keyed by ID */
+let projects = {};
+/** @type {string|null} Currently active project ID */
+let currentProjectId = null;
+/** @type {Array} Original Excel header row (preserved for re-export) */
 let parsedHeaderRow = [];
+/** @type {Array} Original Excel metadata rows (preserved for re-export) */
 let parsedMetaRows = [];
 
-// --- Color configuration ---
+/* =====================================================================
+   9. COLOR CONFIGURATION — label, bucket, priority palettes
+   ===================================================================== */
 const BUCKET_COLORS = {
   'AMZ-UK': '#3B82F6',
   'eBay UK': '#F59E0B',
@@ -185,11 +235,15 @@ const PRIORITY_COLORS = {
   'Low': '#94A3B8'
 };
 
-// --- SVG icons for theme toggle ---
+/* =====================================================================
+   10. SVG ICONS — inline SVG strings for theme toggle
+   ===================================================================== */
 const SVG_MOON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>';
 const SVG_SUN = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
 
-// ===== DOM CACHE =====
+/* =====================================================================
+   11. DOM CACHE — cached element references (populated by initDOMCache)
+   ===================================================================== */
 const DOM = {};
 
 function initDOMCache() {

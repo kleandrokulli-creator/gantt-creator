@@ -75,6 +75,7 @@ function startColResize(e, colId) {
    DRAG & DROP ROWS
    ==================================================================== */
 
+/** Initialize drag-and-drop reordering for data table rows (supports indent/outdent). */
 function initDragDrop() {
   const tbody = DOM.dtBody;
   if (!tbody) return;
@@ -533,6 +534,7 @@ function insertTaskAt(taskId, position) {
    KEYBOARD NAVIGATION (Data Table)
    ==================================================================== */
 
+/** Initialize arrow-key cell navigation and Enter-to-edit in the data table. */
 function initKeyboardNav() {
   const table = document.getElementById('data-table');
   if (!table) return;

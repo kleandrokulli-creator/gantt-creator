@@ -375,12 +375,10 @@ function renderTimelineHeader(dpx) {
   header.innerHTML = html;
 }
 
-function renderTimelineBars(dpx) {
-  const canvas = DOM.timelineCanvas;
-  canvas.style.width = canvasWidth + 'px';
-  let html = '';
+/* --- Sub-functions for renderTimelineBars --- */
 
-  // Vertical grid lines
+function _renderGridLines(dpx) {
+  let html = '';
   let d = new Date(minDate); d.setDate(1);
   while (d <= maxDate) {
     const x = dateToPxR(d, dpx);
@@ -396,12 +394,11 @@ function renderTimelineBars(dpx) {
     }
     d = next;
   }
+  return html;
+}
 
-  // Build holiday set early so weekend shading can skip holiday-covered weekends
-  const _hasCalendars = Object.keys(calendars).length > 0;
-  const _scopedHolidays = _hasCalendars ? buildScopedHolidayLookup() : new Set();
-
-  // Weekend shading (only at week/day zoom, or always in working-days mode)
+function _renderWeekendShading(dpx, scopedHolidays) {
+  let html = '';
   if (currentZoom !== 'month' || workingDaysMode) {
     const satW = dpx[currentZoom]; // 1 day width
     if (satW >= 2) { // only if wide enough to be visible
@@ -412,7 +409,7 @@ function renderTimelineBars(dpx) {
         if (dayOfWeek === 0 || dayOfWeek === 6) {
           // Skip weekend shading if this day is covered by a holiday/closure
           const ds = wd2.getFullYear() + '-' + String(wd2.getMonth() + 1).padStart(2, '0') + '-' + String(wd2.getDate()).padStart(2, '0');
-          if (!_scopedHolidays.has(ds)) {
+          if (!scopedHolidays.has(ds)) {
             const wx = dateToPxR(wd2, dpx);
             html += `<div class="tl-weekend" style="left:${wx}px;width:${Math.max(satW, 1)}px"></div>`;
           }
@@ -421,17 +418,19 @@ function renderTimelineBars(dpx) {
       }
     }
   }
+  return html;
+}
 
-  // Holiday shading (scoped to current view's calendars)
-  // Always show holiday shading regardless of workingDaysMode
-  if (_hasCalendars && _scopedHolidays.size > 0) {
+function _renderHolidayShading(dpx, hasCalendars, scopedHolidays) {
+  let html = '';
+  if (hasCalendars && scopedHolidays.size > 0) {
     const bridgedWeekends = buildScopedBridgedWeekends();
     const dayW = dpx[currentZoom];
     const opacity = dayW < 4 ? '55' : '40';
     const colW = Math.max(dayW, 2);
 
     // Shade all holidays including weekends that fall within a closure
-    for (const dateStr of _scopedHolidays) {
+    for (const dateStr of scopedHolidays) {
       const hDate = new Date(dateStr + 'T00:00:00');
       if (hDate < minDate || hDate > maxDate) continue;
       const x = dateToPxR(hDate, dpx);
@@ -459,7 +458,7 @@ function renderTimelineBars(dpx) {
 
     // Shade bridged weekends (Sat/Sun between holidays, not already in a closure)
     for (const dateStr of bridgedWeekends) {
-      if (_scopedHolidays.has(dateStr)) continue; // already rendered as holiday
+      if (scopedHolidays.has(dateStr)) continue; // already rendered as holiday
       const wDate = new Date(dateStr + 'T00:00:00');
       if (wDate < minDate || wDate > maxDate) continue;
       const x = dateToPxR(wDate, dpx);
@@ -469,20 +468,20 @@ function renderTimelineBars(dpx) {
       html += `<div class="tl-holiday" style="left:${x}px;width:${colW}px;background:${bridgeColor}${dayW < 4 ? '30' : '20'}" title="Weekend (holiday bridge)"></div>`;
     }
   }
+  return html;
+}
 
-  // Today line
+function _renderTodayLine(dpx) {
+  let html = '';
   const today = new Date(); today.setHours(0, 0, 0, 0);
   if (today >= minDate && today <= maxDate) {
     html += `<div class="tl-today" style="left:${dateToPxR(today, dpx)}px"></div>`;
   }
+  return html;
+}
 
-  // Row layout
-  const rowH = ROW_HEIGHT;
-  document.documentElement.style.setProperty('--row-h', rowH + 'px');
-  const backRow = navStack.length > 0 ? 1 : 0;
-  const offsetRows = backRow;
-  const totalRows = visibleRows.length + offsetRows;
-
+function _renderRowGrid(rowH, totalRows) {
+  let html = '';
   // Horizontal row grid lines
   for (let i = 0; i <= totalRows; i++) {
     html += `<div class="tl-row-line" style="top:${i * rowH}px"></div>`;
@@ -493,7 +492,11 @@ function renderTimelineBars(dpx) {
       html += `<div style="position:absolute;left:0;right:0;top:${i * rowH}px;height:${rowH}px;background:var(--row-alt);pointer-events:none"></div>`;
     }
   }
+  return html;
+}
 
+function _renderTaskBars(dpx, rowH, offsetRows) {
+  let html = '';
   // Task bars — each bar splits using its OWN calendar's holidays (not global scoped set)
   const todayTime = new Date().setHours(0, 0, 0, 0);
   visibleRows.forEach((r, idx) => {
@@ -656,8 +659,11 @@ function renderTimelineBars(dpx) {
       });
     }
   });
+  return html;
+}
 
-  // Dependencies arrows (curved SVG paths)
+function _renderDependencyArrows(dpx, rowH, offsetRows) {
+  let html = '';
   const showArrowsFlag = typeof showArrows !== 'undefined' ? showArrows : true;
   if (showArrowsFlag) {
     let svgPaths = '';
@@ -721,6 +727,47 @@ function renderTimelineBars(dpx) {
       html += `<svg class="dep-svg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:3;overflow:visible">${svgPaths}</svg>`;
     }
   }
+  return html;
+}
+
+/* --- Main orchestrator --- */
+
+function renderTimelineBars(dpx) {
+  const canvas = DOM.timelineCanvas;
+  canvas.style.width = canvasWidth + 'px';
+  let html = '';
+
+  // Vertical grid lines
+  html += _renderGridLines(dpx);
+
+  // Build holiday set early so weekend shading can skip holiday-covered weekends
+  const _hasCalendars = Object.keys(calendars).length > 0;
+  const _scopedHolidays = _hasCalendars ? buildScopedHolidayLookup() : new Set();
+
+  // Weekend shading (only at week/day zoom, or always in working-days mode)
+  html += _renderWeekendShading(dpx, _scopedHolidays);
+
+  // Holiday shading (scoped to current view's calendars)
+  html += _renderHolidayShading(dpx, _hasCalendars, _scopedHolidays);
+
+  // Today line
+  html += _renderTodayLine(dpx);
+
+  // Row layout
+  const rowH = ROW_HEIGHT;
+  document.documentElement.style.setProperty('--row-h', rowH + 'px');
+  const backRow = navStack.length > 0 ? 1 : 0;
+  const offsetRows = backRow;
+  const totalRows = visibleRows.length + offsetRows;
+
+  // Horizontal row grid lines and alternating backgrounds
+  html += _renderRowGrid(rowH, totalRows);
+
+  // Task bars with inline milestones
+  html += _renderTaskBars(dpx, rowH, offsetRows);
+
+  // Dependency arrows
+  html += _renderDependencyArrows(dpx, rowH, offsetRows);
 
   const totalH = totalRows * rowH;
   canvas.style.height = totalH + 'px';
@@ -728,11 +775,10 @@ function renderTimelineBars(dpx) {
 }
 
 
-/* ---------- DATA TABLE ---------- */
+/* ---------- DATA TABLE (helper sub-functions) ---------- */
 
-function renderDataTable() {
-  const headerTr = DOM.dtHeader;
-  // Build visible column list in order, respecting custom column order if set
+/** Build visible column list in order, respecting custom column order if set */
+function _buildDTVisibleColumns() {
   let visCols = ALL_COLUMNS.filter(c => visibleColumns.has(c.id));
   if (columnOrder && Array.isArray(columnOrder)) {
     const ordered = [];
@@ -744,12 +790,11 @@ function renderDataTable() {
     visCols.forEach(c => { if (!ordered.includes(c)) ordered.push(c); });
     visCols = ordered;
   }
-  // Map column id -> sortable index for backwards-compatible sorting
-  const SORT_MAP = { taskNum:1, outline:2, name:3, start:4, finish:5, duration:6, milestone:7, labels:8, bucket:9, priority:10, pct:11, deps:12, effort:13, notes:14, assigned:15, status:16, cost:17, sprint:18, category:19, calendar:20 };
-  // Default min-widths per column type
-  const DEFAULT_WIDTHS = DEFAULT_COLUMN_WIDTHS;
+  return visCols;
+}
 
-  // Compute sticky-name-left offset
+/** Compute sticky-name-left offset and apply table classes */
+function _applyDTStickyOffset(DEFAULT_WIDTHS) {
   let stickyNameLeft = 0;
   if (visibleColumns.has('select')) {
     stickyNameLeft += columnWidths['select'] || DEFAULT_WIDTHS['select'] || 36;
@@ -760,7 +805,10 @@ function renderDataTable() {
     table.style.setProperty('--sticky-name-left', stickyNameLeft + 'px');
     table.classList.toggle('edit-mode-active', isDataEditMode);
   }
+}
 
+/** Build header row HTML for all visible columns */
+function _buildDTHeaderHtml(visCols, SORT_MAP, DEFAULT_WIDTHS) {
   let hhtml = '';
   // Drag handle header
   if (isDataEditMode) hhtml += `<th style="width:28px;min-width:28px;max-width:28px;padding:0"></th>`;
@@ -801,8 +849,11 @@ function renderDataTable() {
       hhtml += `<th data-col-id="${col.id}" ${wStyle} ${sortable} ${dragAttr}${sortTitle}><span class="th-content"><span class="th-label">${col.label}</span>${arrow}${filterIcon}</span>${resizeHandle}</th>`;
     }
   });
-  headerTr.innerHTML = hhtml;
+  return hhtml;
+}
 
+/** Get the sorted/filtered task list for the data table */
+function _getDTTasks(visCols) {
   let tasks;
   const isSorted = sortColumns.length > 0;
   if (isSorted) {
@@ -814,150 +865,171 @@ function renderDataTable() {
   }
   // Apply column filters
   tasks = applyColumnFilters(tasks, visCols);
-  
-  const tbody = DOM.dtBody;
-  let bhtml = '';
-  const bucketsArr = getAllBuckets();
-  let prevL1 = null;
-  let groupIndex = 0; // Feature 12: group striping
-  const todayTime = new Date().setHours(0, 0, 0, 0);
-  tasks.forEach((t, idx) => {
-    const isParent = t.children && t.children.length > 0;
-    const autoCalcPct = isParent;
-    const depth = isSorted ? 1 : (t.depth || 1);
-    const indent = (depth - 1) * 20;
-    const pct = Math.round(t.percentComplete * 100);
-    const checked = selectedRows.has(t.id) ? 'checked' : '';
-    const startStr = t.start ? dateToInputStr(t.start) : '';
-    const finishStr = t.finish ? dateToInputStr(t.finish) : '';
-    const tagsHtml = t.labels.map(l => {
-      const c = LABEL_COLORS[l] || '#64748B';
-      return `<span class="tag" style="background:${c}22;color:${c}">${esc(l)}</span>`;
-    }).join('');
+  return { tasks, isSorted };
+}
 
-    // Detect new level-1 group for separator
-    const l1 = t.outline.split('.')[0];
-    const isNewGroup = depth === 1 && prevL1 !== null && l1 !== prevL1;
-    if (isNewGroup) groupIndex++;
-    prevL1 = depth === 1 ? l1 : prevL1;
+/** Build per-row context: classes, flags, computed values */
+function _buildDTRowContext(t, isSorted, todayTime, prevL1, groupIndex) {
+  const isParent = t.children && t.children.length > 0;
+  const autoCalcPct = isParent;
+  const depth = isSorted ? 1 : (t.depth || 1);
+  const indent = (depth - 1) * 20;
+  const pct = Math.round(t.percentComplete * 100);
+  const checked = selectedRows.has(t.id) ? 'checked' : '';
+  const startStr = t.start ? dateToInputStr(t.start) : '';
+  const finishStr = t.finish ? dateToInputStr(t.finish) : '';
+  const tagsHtml = t.labels.map(l => {
+    const c = LABEL_COLORS[l] || '#64748B';
+    return `<span class="tag" style="background:${c}22;color:${c}">${esc(l)}</span>`;
+  }).join('');
 
-    // Feature 3: Conditional formatting
-    const isOverdue = t.finish && t.finish.getTime() < todayTime && pct < 100;
-    const isComplete = pct === 100;
-    const dateWarn = t.start && t.finish && t.finish < t.start;
+  // Detect new level-1 group for separator
+  const l1 = t.outline.split('.')[0];
+  const isNewGroup = depth === 1 && prevL1 !== null && l1 !== prevL1;
+  const newGroupIndex = isNewGroup ? groupIndex + 1 : groupIndex;
+  const newPrevL1 = depth === 1 ? l1 : prevL1;
 
-    // Row classes
-    const rowCls = [
-      isParent ? 'parent-row' : '',
-      depth === 1 ? 'dt-level1' : '',
-      depth === 2 ? 'dt-level2' : '',
-      depth >= 3 ? 'dt-level3-plus' : '',
-      isNewGroup ? 'dt-group-sep' : '',
-      isOverdue ? 'dt-overdue' : '',
-      isComplete ? 'dt-complete' : '',
-      (groupIndex % 2 === 1) ? 'dt-group-alt' : ''
-    ].filter(Boolean).join(' ');
+  // Feature 3: Conditional formatting
+  const isOverdue = t.finish && t.finish.getTime() < todayTime && pct < 100;
+  const isComplete = pct === 100;
+  const dateWarn = t.start && t.finish && t.finish < t.start;
 
-    // Completion cell: greyed out for auto-calc parents
-    const pctDisabled = autoCalcPct ? 'disabled title="Auto-calcolato dai sotto-task"' : '';
-    const pctClass = autoCalcPct ? 'cell-pct cell-pct-auto' : 'cell-pct';
+  // Row classes
+  const rowCls = [
+    isParent ? 'parent-row' : '',
+    depth === 1 ? 'dt-level1' : '',
+    depth === 2 ? 'dt-level2' : '',
+    depth >= 3 ? 'dt-level3-plus' : '',
+    isNewGroup ? 'dt-group-sep' : '',
+    isOverdue ? 'dt-overdue' : '',
+    isComplete ? 'dt-complete' : '',
+    (newGroupIndex % 2 === 1) ? 'dt-group-alt' : ''
+  ].filter(Boolean).join(' ');
 
-    // Tree indent with connector line for children
-    const indentHtml = depth > 1
-      ? `<span class="dt-tree-line" style="width:${indent}px"><span class="dt-tree-connector"></span></span>`
-      : '';
+  // Completion cell: greyed out for auto-calc parents
+  const pctDisabled = autoCalcPct ? 'disabled title="Auto-calcolato dai sotto-task"' : '';
+  const pctClass = autoCalcPct ? 'cell-pct cell-pct-auto' : 'cell-pct';
 
-    const isExpanded = !getState().collapsedSet.has(t.outline);
-    const arrowCls = isExpanded ? 'dt-arrow expanded' : 'dt-arrow';
-    
-    // In Data tab, we make the parent icon clickable to toggle expansion
-    const typeIcon = isParent 
-      ? `<span class="${arrowCls}" onclick="toggleExpand('${t.outline}')" title="Collapse/Expand"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></span>`
-      : `<span class="dt-icon-wrap leaf-icon"><svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="6"/></svg></span>`;
+  // Tree indent with connector line for children
+  const indentHtml = depth > 1
+    ? `<span class="dt-tree-line" style="width:${indent}px"><span class="dt-tree-connector"></span></span>`
+    : '';
 
-    // Status options for the custom column
-    // STATUS_OPTIONS is defined globally in state.js
+  const isExpanded = !getState().collapsedSet.has(t.outline);
+  const arrowCls = isExpanded ? 'dt-arrow expanded' : 'dt-arrow';
 
-    // Build cells per visible column
-    let rowContent = '';
-    visCols.forEach(col => {
-      if (isDataEditMode) {
-        switch(col.id) {
-          case 'select': rowContent += `<td data-col="select" class="dt-action-cell"><input type="checkbox" class="row-cb" ${checked} data-id="${t.id}"><button class="dt-insert-btn" onclick="insertTaskBelow(${t.id})" title="Inserisci task sotto">+</button></td>`; break;
-          case 'taskNum': rowContent += `<td data-col="taskNum" style="color:var(--grey-txt);font-size:.75rem">${t.taskNumber}</td>`; break;
-          case 'outline': rowContent += `<td data-col="outline" style="color:var(--grey-txt);font-size:.78rem">${esc(t.outline)}</td>`; break;
-          case 'name': rowContent += `<td data-col="name" title="${esc(t.name)}"><div class="task-name-cell">${indentHtml}${typeIcon}<input type="text" value="${esc(t.name)}" data-field="name" data-id="${t.id}" title="${esc(t.name)}"></div></td>`; break;
-          case 'start': rowContent += `<td data-col="start"${dateWarn ? ' class="dt-cell-warn"' : ''}><input type="date" value="${startStr}" data-field="start" data-id="${t.id}"></td>`; break;
-          case 'finish': rowContent += `<td data-col="finish"${dateWarn ? ' class="dt-cell-warn"' : ''}><input type="date" value="${finishStr}" data-field="finish" data-id="${t.id}"></td>`; break;
-          case 'duration': rowContent += `<td data-col="duration"><input type="number" min="0" value="${parseInt(t.duration) || 0}" data-field="duration" data-id="${t.id}" style="width:55px;font-size:.78rem" title="${workingDaysMode ? 'Working days (Mon-Fri, excl. holidays)' : 'Calendar days'}"></td>`; break;
-          case 'milestone': rowContent += `<td data-col="milestone" style="text-align:center"><input type="checkbox" class="ms-cb" data-field="isMilestone" data-id="${t.id}" ${t.isMilestone ? 'checked' : ''} title="Milestone"></td>`; break;
-          case 'labels': rowContent += `<td data-col="labels"><div class="cell-tags cell-tags-edit" data-id="${t.id}" onclick="openDataLabelPicker(this,${t.id})">${tagsHtml}<span class="tag-add-hint">+</span></div></td>`; break;
-          case 'bucket': rowContent += `<td data-col="bucket"><select data-field="bucket" data-id="${t.id}">${bucketsArr.map(b => `<option value="${b}" ${b === t.bucket ? 'selected' : ''}>${b || '—'}</option>`).join('')}</select></td>`; break;
-          case 'priority': rowContent += `<td data-col="priority"><select data-field="priority" data-id="${t.id}">${['', 'Urgent', 'Important', 'Medium', 'Low'].map(p => `<option value="${p}" ${p === t.priority ? 'selected' : ''}>${p || '—'}</option>`).join('')}</select></td>`; break;
-          case 'pct': rowContent += `<td data-col="pct"><div class="${pctClass}"><input type="number" min="0" max="100" value="${pct}" data-field="percentComplete" data-id="${t.id}" style="width:50px" ${pctDisabled}><div class="mini-prog"><div class="fill" style="width:${pct}%;background:${t.color}"></div></div></div></td>`; break;
-          case 'deps': rowContent += `<td data-col="deps" class="dep-cell-wrap" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<div class="dep-hover-edit" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}">` : '<div>'}<input type="text" value="${esc(t.dependsOn)}" data-field="dependsOn" data-id="${t.id}" title="${esc(buildDepTooltip(t.dependsOn))}"></div></td>`; break;
-          case 'effort': rowContent += `<td data-col="effort"><input type="text" value="${esc(String(t.effort || ''))}" data-field="effort" data-id="${t.id}"></td>`; break;
-          case 'notes': rowContent += `<td data-col="notes" title="${esc(t.notes || '')}"><input type="text" value="${esc(t.notes || '')}" data-field="notes" data-id="${t.id}" title="${esc(t.notes || '')}"></td>`; break;
-          case 'assigned': rowContent += `<td data-col="assigned" title="${esc(t.assigned || '')}"><input type="text" value="${esc(t.assigned || '')}" data-field="assigned" data-id="${t.id}" placeholder="..." title="${esc(t.assigned || '')}"></td>`; break;
-          case 'status': rowContent += `<td data-col="status"><select data-field="status" data-id="${t.id}">${STATUS_OPTIONS.map(s => `<option value="${s}" ${s === (t.status||'') ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></td>`; break;
-          case 'cost': rowContent += `<td data-col="cost"><input type="text" value="${esc(t.cost || '')}" data-field="cost" data-id="${t.id}" placeholder="..."></td>`; break;
-          case 'sprint': rowContent += `<td data-col="sprint"><input type="text" value="${esc(t.sprint || '')}" data-field="sprint" data-id="${t.id}" placeholder="..."></td>`; break;
-          case 'category': rowContent += `<td data-col="category"><input type="text" value="${esc(t.category || '')}" data-field="category" data-id="${t.id}" placeholder="..."></td>`; break;
-          case 'calendar': {
-            const calIds = Object.keys(calendars);
-            const curCal = t.calendarId || getDefaultCalendarId();
-            rowContent += `<td data-col="calendar"><select data-field="calendarId" data-id="${t.id}">${calIds.map(id => `<option value="${id}" ${id === curCal ? 'selected' : ''}>${esc(calendars[id].name)}</option>`).join('')}</select></td>`;
-            break;
-          }
-        }
-      } else {
-        const dispStart = t.start ? fmtDate(t.start) : '—';
-        const dispFinish = t.finish ? fmtDate(t.finish) : '—';
-        const msIcon = t.isMilestone ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="${getMilestoneColor(t)}" stroke="none"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>` : `<span style="color:var(--border)">—</span>`;
-        switch(col.id) {
-          case 'select': rowContent += `<td data-col="select" class="dt-action-cell"><input type="checkbox" class="row-cb" ${checked} data-id="${t.id}" style="opacity:0;pointer-events:none"></td>`; break;
-          case 'taskNum': rowContent += `<td data-col="taskNum" style="color:var(--grey-txt);font-size:.75rem">${t.taskNumber}</td>`; break;
-          case 'outline': rowContent += `<td data-col="outline" style="color:var(--grey-txt);font-size:.78rem">${esc(t.outline)}</td>`; break;
-          case 'name': rowContent += `<td data-col="name" title="${esc(t.name)}"><div class="task-name-cell">${indentHtml}${typeIcon}<span class="ro-text" style="font-weight:500" title="${esc(t.name)}">${esc(t.name)}</span></div></td>`; break;
-          case 'start': rowContent += `<td data-col="start"${dateWarn ? ' class="dt-cell-warn"' : ''}><span class="ro-text">${dispStart}</span></td>`; break;
-          case 'finish': rowContent += `<td data-col="finish"${dateWarn ? ' class="dt-cell-warn"' : ''}><span class="ro-text">${dispFinish}</span></td>`; break;
-          case 'duration': rowContent += `<td data-col="duration" style="font-size:.78rem;color:var(--grey-txt)">${esc(t.duration)}</td>`; break;
-          case 'milestone': rowContent += `<td data-col="milestone" style="text-align:center">${msIcon}</td>`; break;
-          case 'labels': rowContent += `<td data-col="labels"><div class="cell-tags">${tagsHtml}</div></td>`; break;
-          case 'bucket': rowContent += `<td data-col="bucket"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.bucket || '—')}</span></td>`; break;
-          case 'priority': rowContent += `<td data-col="priority"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.priority || '—')}</span></td>`; break;
-          case 'pct': rowContent += `<td data-col="pct"><div class="${pctClass}"><span class="ro-text" style="width:40px;display:inline-block;text-align:right;font-size:0.85rem">${pct}%</span><div class="mini-prog" style="margin-left:8px"><div class="fill" style="width:${pct}%;background:${t.color}"></div></div></div></td>`; break;
-          case 'deps': rowContent += `<td data-col="deps" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<span class="ro-text dep-hover" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}" title="${esc(buildDepTooltip(t.dependsOn))}">${esc(t.dependsOn)}</span>` : '<span class="ro-text">—</span>'}</td>`; break;
-          case 'effort': rowContent += `<td data-col="effort"><span class="ro-text">${esc(String(t.effort || '—'))}</span></td>`; break;
-          case 'notes': rowContent += `<td data-col="notes" title="${esc(t.notes || '')}"><span class="ro-text" style="color:var(--grey-txt);font-style:italic" title="${esc(t.notes || '')}">${esc(t.notes || '')}</span></td>`; break;
-          case 'assigned': rowContent += `<td data-col="assigned" title="${esc(t.assigned || '')}"><span class="ro-text" style="color:var(--grey-txt)" title="${esc(t.assigned || '—')}">${esc(t.assigned || '—')}</span></td>`; break;
-          case 'status': rowContent += `<td data-col="status">${renderStatusBadge(t.status)}</td>`; break;
-          case 'cost': rowContent += `<td data-col="cost"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.cost || '—')}</span></td>`; break;
-          case 'sprint': rowContent += `<td data-col="sprint"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.sprint || '—')}</span></td>`; break;
-          case 'category': rowContent += `<td data-col="category"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.category || '—')}</span></td>`; break;
-          case 'calendar': {
-            const calId = t.calendarId || getDefaultCalendarId();
-            const calName = calendars[calId] ? calendars[calId].name : '—';
-            rowContent += `<td data-col="calendar"><span class="ro-text" style="color:var(--grey-txt)">${esc(calName)}</span></td>`;
-            break;
-          }
-        }
-      }
-    });
+  // In Data tab, we make the parent icon clickable to toggle expansion
+  const typeIcon = isParent
+    ? `<span class="${arrowCls}" onclick="toggleExpand('${t.outline}')" title="Collapse/Expand"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></span>`
+    : `<span class="dt-icon-wrap leaf-icon"><svg width="6" height="6" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="6"/></svg></span>`;
 
-    // Drag handle for edit mode
-    const dragHandleHtml = isDataEditMode
-      ? `<td style="width:28px;padding:0;text-align:center"><div class="dt-drag-handle" draggable="false" data-drag-id="${t.id}" title="Drag to reorder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="4" r="2.2"/><circle cx="16" cy="4" r="2.2"/><circle cx="8" cy="12" r="2.2"/><circle cx="16" cy="12" r="2.2"/><circle cx="8" cy="20" r="2.2"/><circle cx="16" cy="20" r="2.2"/></svg></div></td>`
-      : '';
+  return {
+    isParent, depth, pct, checked, startStr, finishStr, tagsHtml,
+    dateWarn, rowCls, pctDisabled, pctClass, indentHtml, typeIcon,
+    newPrevL1, newGroupIndex
+  };
+}
 
-    bhtml += `<tr class="${rowCls}" data-id="${t.id}" data-row-idx="${idx}">
-      ${dragHandleHtml}${rowContent}
-    </tr>`;
+/** Build a single cell HTML in edit mode */
+function _buildDTEditCell(col, t, ctx, bucketsArr) {
+  const { checked, startStr, finishStr, tagsHtml, dateWarn, pctDisabled, pctClass, indentHtml, typeIcon, pct } = ctx;
+  switch(col.id) {
+    case 'select': return `<td data-col="select" class="dt-action-cell"><input type="checkbox" class="row-cb" ${checked} data-id="${t.id}"><button class="dt-insert-btn" onclick="insertTaskBelow(${t.id})" title="Inserisci task sotto">+</button></td>`;
+    case 'taskNum': return `<td data-col="taskNum" style="color:var(--grey-txt);font-size:.75rem">${t.taskNumber}</td>`;
+    case 'outline': return `<td data-col="outline" style="color:var(--grey-txt);font-size:.78rem">${esc(t.outline)}</td>`;
+    case 'name': return `<td data-col="name" title="${esc(t.name)}"><div class="task-name-cell">${indentHtml}${typeIcon}<input type="text" value="${esc(t.name)}" data-field="name" data-id="${t.id}" title="${esc(t.name)}"></div></td>`;
+    case 'start': return `<td data-col="start"${dateWarn ? ' class="dt-cell-warn"' : ''}><input type="date" value="${startStr}" data-field="start" data-id="${t.id}"></td>`;
+    case 'finish': return `<td data-col="finish"${dateWarn ? ' class="dt-cell-warn"' : ''}><input type="date" value="${finishStr}" data-field="finish" data-id="${t.id}"></td>`;
+    case 'duration': return `<td data-col="duration"><input type="number" min="0" value="${parseInt(t.duration) || 0}" data-field="duration" data-id="${t.id}" style="width:55px;font-size:.78rem" title="${workingDaysMode ? 'Working days (Mon-Fri, excl. holidays)' : 'Calendar days'}"></td>`;
+    case 'milestone': return `<td data-col="milestone" style="text-align:center"><input type="checkbox" class="ms-cb" data-field="isMilestone" data-id="${t.id}" ${t.isMilestone ? 'checked' : ''} title="Milestone"></td>`;
+    case 'labels': return `<td data-col="labels"><div class="cell-tags cell-tags-edit" data-id="${t.id}" onclick="openDataLabelPicker(this,${t.id})">${tagsHtml}<span class="tag-add-hint">+</span></div></td>`;
+    case 'bucket': return `<td data-col="bucket"><select data-field="bucket" data-id="${t.id}">${bucketsArr.map(b => `<option value="${b}" ${b === t.bucket ? 'selected' : ''}>${b || '—'}</option>`).join('')}</select></td>`;
+    case 'priority': return `<td data-col="priority"><select data-field="priority" data-id="${t.id}">${['', 'Urgent', 'Important', 'Medium', 'Low'].map(p => `<option value="${p}" ${p === t.priority ? 'selected' : ''}>${p || '—'}</option>`).join('')}</select></td>`;
+    case 'pct': return `<td data-col="pct"><div class="${pctClass}"><input type="number" min="0" max="100" value="${pct}" data-field="percentComplete" data-id="${t.id}" style="width:50px" ${pctDisabled}><div class="mini-prog"><div class="fill" style="width:${pct}%;background:${t.color}"></div></div></div></td>`;
+    case 'deps': return `<td data-col="deps" class="dep-cell-wrap" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<div class="dep-hover-edit" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}">` : '<div>'}<input type="text" value="${esc(t.dependsOn)}" data-field="dependsOn" data-id="${t.id}" title="${esc(buildDepTooltip(t.dependsOn))}"></div></td>`;
+    case 'effort': return `<td data-col="effort"><input type="text" value="${esc(String(t.effort || ''))}" data-field="effort" data-id="${t.id}"></td>`;
+    case 'notes': return `<td data-col="notes" title="${esc(t.notes || '')}"><input type="text" value="${esc(t.notes || '')}" data-field="notes" data-id="${t.id}" title="${esc(t.notes || '')}"></td>`;
+    case 'assigned': return `<td data-col="assigned" title="${esc(t.assigned || '')}"><input type="text" value="${esc(t.assigned || '')}" data-field="assigned" data-id="${t.id}" placeholder="..." title="${esc(t.assigned || '')}"></td>`;
+    case 'status': return `<td data-col="status"><select data-field="status" data-id="${t.id}">${STATUS_OPTIONS.map(s => `<option value="${s}" ${s === (t.status||'') ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></td>`;
+    case 'cost': return `<td data-col="cost"><input type="text" value="${esc(t.cost || '')}" data-field="cost" data-id="${t.id}" placeholder="..."></td>`;
+    case 'sprint': return `<td data-col="sprint"><input type="text" value="${esc(t.sprint || '')}" data-field="sprint" data-id="${t.id}" placeholder="..."></td>`;
+    case 'category': return `<td data-col="category"><input type="text" value="${esc(t.category || '')}" data-field="category" data-id="${t.id}" placeholder="..."></td>`;
+    case 'calendar': {
+      const calIds = Object.keys(calendars);
+      const curCal = t.calendarId || getDefaultCalendarId();
+      return `<td data-col="calendar"><select data-field="calendarId" data-id="${t.id}">${calIds.map(id => `<option value="${id}" ${id === curCal ? 'selected' : ''}>${esc(calendars[id].name)}</option>`).join('')}</select></td>`;
+    }
+    default: return '';
+  }
+}
+
+/** Build a single cell HTML in read-only mode */
+function _buildDTReadCell(col, t, ctx) {
+  const { checked, tagsHtml, dateWarn, pctClass, indentHtml, typeIcon, pct } = ctx;
+  const dispStart = t.start ? fmtDate(t.start) : '—';
+  const dispFinish = t.finish ? fmtDate(t.finish) : '—';
+  const msIcon = t.isMilestone ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="${getMilestoneColor(t)}" stroke="none"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg>` : `<span style="color:var(--border)">—</span>`;
+  switch(col.id) {
+    case 'select': return `<td data-col="select" class="dt-action-cell"><input type="checkbox" class="row-cb" ${checked} data-id="${t.id}" style="opacity:0;pointer-events:none"></td>`;
+    case 'taskNum': return `<td data-col="taskNum" style="color:var(--grey-txt);font-size:.75rem">${t.taskNumber}</td>`;
+    case 'outline': return `<td data-col="outline" style="color:var(--grey-txt);font-size:.78rem">${esc(t.outline)}</td>`;
+    case 'name': return `<td data-col="name" title="${esc(t.name)}"><div class="task-name-cell">${indentHtml}${typeIcon}<span class="ro-text" style="font-weight:500" title="${esc(t.name)}">${esc(t.name)}</span></div></td>`;
+    case 'start': return `<td data-col="start"${dateWarn ? ' class="dt-cell-warn"' : ''}><span class="ro-text">${dispStart}</span></td>`;
+    case 'finish': return `<td data-col="finish"${dateWarn ? ' class="dt-cell-warn"' : ''}><span class="ro-text">${dispFinish}</span></td>`;
+    case 'duration': return `<td data-col="duration" style="font-size:.78rem;color:var(--grey-txt)">${esc(t.duration)}</td>`;
+    case 'milestone': return `<td data-col="milestone" style="text-align:center">${msIcon}</td>`;
+    case 'labels': return `<td data-col="labels"><div class="cell-tags">${tagsHtml}</div></td>`;
+    case 'bucket': return `<td data-col="bucket"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.bucket || '—')}</span></td>`;
+    case 'priority': return `<td data-col="priority"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.priority || '—')}</span></td>`;
+    case 'pct': return `<td data-col="pct"><div class="${pctClass}"><span class="ro-text" style="width:40px;display:inline-block;text-align:right;font-size:0.85rem">${pct}%</span><div class="mini-prog" style="margin-left:8px"><div class="fill" style="width:${pct}%;background:${t.color}"></div></div></div></td>`;
+    case 'deps': return `<td data-col="deps" title="${esc(buildDepTooltip(t.dependsOn))}">${t.dependsOn ? `<span class="ro-text dep-hover" data-dep-tip="${esc(buildDepTooltip(t.dependsOn))}" title="${esc(buildDepTooltip(t.dependsOn))}">${esc(t.dependsOn)}</span>` : '<span class="ro-text">—</span>'}</td>`;
+    case 'effort': return `<td data-col="effort"><span class="ro-text">${esc(String(t.effort || '—'))}</span></td>`;
+    case 'notes': return `<td data-col="notes" title="${esc(t.notes || '')}"><span class="ro-text" style="color:var(--grey-txt);font-style:italic" title="${esc(t.notes || '')}">${esc(t.notes || '')}</span></td>`;
+    case 'assigned': return `<td data-col="assigned" title="${esc(t.assigned || '')}"><span class="ro-text" style="color:var(--grey-txt)" title="${esc(t.assigned || '—')}">${esc(t.assigned || '—')}</span></td>`;
+    case 'status': return `<td data-col="status">${renderStatusBadge(t.status)}</td>`;
+    case 'cost': return `<td data-col="cost"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.cost || '—')}</span></td>`;
+    case 'sprint': return `<td data-col="sprint"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.sprint || '—')}</span></td>`;
+    case 'category': return `<td data-col="category"><span class="ro-text" style="color:var(--grey-txt)">${esc(t.category || '—')}</span></td>`;
+    case 'calendar': {
+      const calId = t.calendarId || getDefaultCalendarId();
+      const calName = calendars[calId] ? calendars[calId].name : '—';
+      return `<td data-col="calendar"><span class="ro-text" style="color:var(--grey-txt)">${esc(calName)}</span></td>`;
+    }
+    default: return '';
+  }
+}
+
+/** Build a single data table row HTML */
+function _buildDTRowHtml(t, idx, visCols, ctx, bucketsArr) {
+  const { rowCls } = ctx;
+
+  // Status options for the custom column
+  // STATUS_OPTIONS is defined globally in state.js
+
+  // Build cells per visible column
+  let rowContent = '';
+  visCols.forEach(col => {
+    if (isDataEditMode) {
+      rowContent += _buildDTEditCell(col, t, ctx, bucketsArr);
+    } else {
+      rowContent += _buildDTReadCell(col, t, ctx);
+    }
   });
 
-  // Quick-add row (always visible)
+  // Drag handle for edit mode
+  const dragHandleHtml = isDataEditMode
+    ? `<td style="width:28px;padding:0;text-align:center"><div class="dt-drag-handle" draggable="false" data-drag-id="${t.id}" title="Drag to reorder"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="4" r="2.2"/><circle cx="16" cy="4" r="2.2"/><circle cx="8" cy="12" r="2.2"/><circle cx="16" cy="12" r="2.2"/><circle cx="8" cy="20" r="2.2"/><circle cx="16" cy="20" r="2.2"/></svg></div></td>`
+    : '';
+
+  return `<tr class="${rowCls}" data-id="${t.id}" data-row-idx="${idx}">
+      ${dragHandleHtml}${rowContent}
+    </tr>`;
+}
+
+/** Build the quick-add row at the bottom of the data table */
+function _buildDTQuickAddRow(visCols) {
   const qaColSpan = visCols.length + (isDataEditMode ? 1 : 0);
-  bhtml += `<tr class="quick-add-row">
+  return `<tr class="quick-add-row">
     ${isDataEditMode ? '<td style="width:24px;padding:0"><span class="quick-add-plus">+</span></td>' : ''}
     ${visCols.map((col, ci) => {
       if (col.id === 'name') return `<td colspan="1"><input type="text" class="quick-add-input" id="quick-add-input" placeholder="Add new task... (Enter to add)" onkeydown="handleQuickAdd(event)"></td>`;
@@ -965,9 +1037,10 @@ function renderDataTable() {
       return '<td></td>';
     }).join('')}
   </tr>`;
+}
 
-  tbody.innerHTML = bhtml;
-
+/** Post-render updates: task count, bulk edit bar, layout mode, toggle button */
+function _applyDTPostRender(tasks, visCols) {
   const countEl = document.getElementById('dati-task-count');
   if (countEl) countEl.textContent = `${tasks.length} tasks`;
 
@@ -1003,6 +1076,42 @@ function renderDataTable() {
       togBtn.classList.remove('disabled');
     }
   }
+}
+
+/* ---------- DATA TABLE (main orchestrator) ---------- */
+
+function renderDataTable() {
+  const headerTr = DOM.dtHeader;
+  const visCols = _buildDTVisibleColumns();
+  // Map column id -> sortable index for backwards-compatible sorting
+  const SORT_MAP = { taskNum:1, outline:2, name:3, start:4, finish:5, duration:6, milestone:7, labels:8, bucket:9, priority:10, pct:11, deps:12, effort:13, notes:14, assigned:15, status:16, cost:17, sprint:18, category:19, calendar:20 };
+  // Default min-widths per column type
+  const DEFAULT_WIDTHS = DEFAULT_COLUMN_WIDTHS;
+
+  _applyDTStickyOffset(DEFAULT_WIDTHS);
+
+  headerTr.innerHTML = _buildDTHeaderHtml(visCols, SORT_MAP, DEFAULT_WIDTHS);
+
+  const { tasks, isSorted } = _getDTTasks(visCols);
+
+  const tbody = DOM.dtBody;
+  let bhtml = '';
+  const bucketsArr = getAllBuckets();
+  let prevL1 = null;
+  let groupIndex = 0; // Feature 12: group striping
+  const todayTime = new Date().setHours(0, 0, 0, 0);
+  tasks.forEach((t, idx) => {
+    const ctx = _buildDTRowContext(t, isSorted, todayTime, prevL1, groupIndex);
+    prevL1 = ctx.newPrevL1;
+    groupIndex = ctx.newGroupIndex;
+    bhtml += _buildDTRowHtml(t, idx, visCols, ctx, bucketsArr);
+  });
+
+  bhtml += _buildDTQuickAddRow(visCols);
+
+  tbody.innerHTML = bhtml;
+
+  _applyDTPostRender(tasks, visCols);
 }
 
 /** Build a readable tooltip for a dependsOn string like "5FS", "3FS+2d" */

@@ -4,6 +4,7 @@
 
 /* ---------- ADD / DELETE TASKS ---------- */
 
+/** Add a new top-level task with default values and append it to allTasks. */
 function addNewTask() {
   snapshotUndo();
   const maxId = allTasks.reduce((m, t) => Math.max(m, t.id), 0);
@@ -734,6 +735,7 @@ function showAutoLinkResult(title, msg) {
   document.body.insertAdjacentHTML('beforeend', html);
 }
 
+/** Delete all tasks currently in selectedRows after user confirmation. */
 async function deleteSelectedTasks() {
   if (!selectedRows.size) return;
   if (!await showConfirm(`Delete ${selectedRows.size} selected task(s)?`, { title: 'Delete Tasks', danger: true, okLabel: 'Delete' })) return;

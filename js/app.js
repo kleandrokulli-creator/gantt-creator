@@ -423,6 +423,9 @@ if (resizer && leftPanel) {
 
 /* ---------- INITIALIZATION ---------- */
 
+/** App entry point: loads theme, restores projects from localStorage,
+ * handles shared URLs, and initializes data table interactions.
+ */
 (async function init() {
   initDOMCache();
   loadTheme();

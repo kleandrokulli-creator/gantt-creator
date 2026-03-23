@@ -63,7 +63,10 @@ function getResponsiveDayPx() {
   };
 }
 
-/** Get CSS background for a bar — solid or striped if multiple label colors */
+/** Get CSS background for a bar -- solid color or diagonal stripes if multiple label colors.
+ * @param {string[]} barColors - Array of hex color strings
+ * @returns {string} CSS color value or repeating-linear-gradient
+ */
 function getBarBackground(barColors) {
   if (!barColors || barColors.length <= 1) {
     return barColors?.[0] || DEFAULT_COLOR;
@@ -212,6 +215,10 @@ function invalidateHolidayCache() {
   Object.keys(_holidayCache).forEach(k => delete _holidayCache[k]);
 }
 
+/** Build a Set of "YYYY-MM-DD" strings for all holidays and closures in a calendar.
+ * @param {string} calendarId - Calendar ID to look up
+ * @returns {Set<string>} Set of date strings that are non-working days
+ */
 function buildHolidayLookup(calendarId) {
   if (_holidayCache[calendarId]) return _holidayCache[calendarId];
   const cal = calendars[calendarId];
@@ -264,6 +271,11 @@ function getHolidayInfo(dateStr) {
   return results;
 }
 
+/** Check if a date is a non-working day (weekend or holiday in the given calendar).
+ * @param {Date} date - The date to check
+ * @param {string} [calendarId] - Calendar ID (defaults to the default calendar)
+ * @returns {boolean} True if the date is a weekend or holiday
+ */
 function isNonWorkingDay(date, calendarId) {
   if (isWeekend(date)) return true;
   if (!workingDaysMode) return false;
@@ -273,7 +285,12 @@ function isNonWorkingDay(date, calendarId) {
   return buildHolidayLookup(calId).has(dateStr);
 }
 
-/** Count working days between start and end (inclusive of start, exclusive of end) */
+/** Count working days between two dates (inclusive of start, exclusive of end).
+ * @param {Date} start - Start date
+ * @param {Date} end - End date (exclusive)
+ * @param {string} [calendarId] - Calendar ID for holiday lookup
+ * @returns {number} Number of working days
+ */
 function countWorkingDays(start, end, calendarId) {
   if (!start || !end) return 0;
   const calId = calendarId || getDefaultCalendarId();
@@ -293,7 +310,12 @@ function countWorkingDays(start, end, calendarId) {
   return count;
 }
 
-/** Advance N working days forward from startDate */
+/** Advance N working days forward from a start date, skipping weekends and holidays.
+ * @param {Date} startDate - The date to start from
+ * @param {number} numDays - Number of working days to advance
+ * @param {string} [calendarId] - Calendar ID for holiday lookup
+ * @returns {Date} The resulting date after advancing
+ */
 function addWorkingDays(startDate, numDays, calendarId) {
   const calId = calendarId || getDefaultCalendarId();
   const holidays = calId ? buildHolidayLookup(calId) : new Set();

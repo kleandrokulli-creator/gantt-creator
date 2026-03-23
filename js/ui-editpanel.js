@@ -5,6 +5,9 @@
 
 let _epInitialAutoColor = '';   // tracks the auto-color when panel first opened
 
+/** Cached edit-panel DOM references (populated in openEditPanel, cleared in closeEditPanel) */
+const _ep = {};
+
 function openEditPanel(taskId) {
   editPanelTaskId = taskId;
   const task = allTasks.find(t => t.id === taskId);
@@ -104,43 +107,54 @@ function openEditPanel(taskId) {
   panel.innerHTML = html;
   DOM.editPanelOverlay.classList.add('open');
   snapshotUndo(); // Single undo snapshot when panel opens
-  setTimeout(() => { const nameEl = document.getElementById('ep-name'); if (nameEl) nameEl.focus(); }, 100);
+
+  // Cache all edit-panel input references once
+  _ep.name = document.getElementById('ep-name');
+  _ep.start = document.getElementById('ep-start');
+  _ep.finish = document.getElementById('ep-finish');
+  _ep.durNum = document.getElementById('ep-duration-num');
+  _ep.pct = document.getElementById('ep-pct');
+  _ep.pctVal = document.getElementById('ep-pct-val');
+  _ep.color = document.getElementById('ep-color');
+  _ep.bucket = document.getElementById('ep-bucket');
+  _ep.priority = document.getElementById('ep-priority');
+  _ep.depends = document.getElementById('ep-depends');
+  _ep.effort = document.getElementById('ep-effort');
+  _ep.notes = document.getElementById('ep-notes');
+  _ep.calendar = document.getElementById('ep-calendar');
+
+  setTimeout(() => { if (_ep.name) _ep.name.focus(); }, 100);
 
   // Slider live update during drag
-  const epPctEl = document.getElementById('ep-pct');
-  const epPctValEl = document.getElementById('ep-pct-val');
-  if (epPctEl && !epPctEl.disabled) {
-    epPctEl.addEventListener('input', () => {
-      const v = epPctEl.value;
-      epPctValEl.textContent = v + '%';
-      epPctEl.parentElement.style.setProperty('--pct', v + '%');
-      epPctValEl.className = v >= 100 ? 'pct-done' : v > 0 ? 'pct-partial' : '';
+  if (_ep.pct && !_ep.pct.disabled) {
+    _ep.pct.addEventListener('input', () => {
+      const v = _ep.pct.value;
+      _ep.pctVal.textContent = v + '%';
+      _ep.pct.parentElement.style.setProperty('--pct', v + '%');
+      _ep.pctVal.className = v >= 100 ? 'pct-done' : v > 0 ? 'pct-partial' : '';
       clearTimeout(saveDebounce);
       saveDebounce = setTimeout(() => saveEditPanel(), DEBOUNCE_INPUT_MS);
     });
-    epPctEl.addEventListener('change', () => {
+    _ep.pct.addEventListener('change', () => {
       clearTimeout(saveDebounce);
       saveEditPanel();
     });
   }
 
   // Color picker
-  const epColor = document.getElementById('ep-color');
-  if (epColor) {
-    epColor.addEventListener('input', () => {
+  if (_ep.color) {
+    _ep.color.addEventListener('input', () => {
       clearTimeout(saveDebounce);
       saveDebounce = setTimeout(() => saveEditPanel(), DEBOUNCE_INPUT_MS);
     });
-    epColor.addEventListener('change', () => {
+    _ep.color.addEventListener('change', () => {
       clearTimeout(saveDebounce);
       saveEditPanel();
     });
   }
 
   // Text fields: save on input (debounced) and change (immediate)
-  const textFields = ['ep-name', 'ep-bucket', 'ep-priority', 'ep-depends', 'ep-effort', 'ep-notes'];
-  textFields.forEach(fid => {
-    const el = document.getElementById(fid);
+  [_ep.name, _ep.bucket, _ep.priority, _ep.depends, _ep.effort, _ep.notes].forEach(el => {
     if (!el) return;
     el.addEventListener('input', () => {
       clearTimeout(saveDebounce);
@@ -153,8 +167,7 @@ function openEditPanel(taskId) {
   });
   // Date fields: save ONLY on change (not input) to avoid saving
   // intermediate values when user navigates months in the date picker
-  ['ep-start', 'ep-finish'].forEach(fid => {
-    const el = document.getElementById(fid);
+  [_ep.start, _ep.finish].forEach(el => {
     if (!el) return;
     el.addEventListener('change', () => {
       clearTimeout(saveDebounce);
@@ -169,10 +182,9 @@ function resetTaskColor() {
   task.colorOverride = '';
   reassignColors();
   // Update the color picker UI and sync the initial tracker
-  const epColor = document.getElementById('ep-color');
-  if (epColor) {
-    epColor.value = task.color || DEFAULT_COLOR;
-    epColor.classList.remove('active');
+  if (_ep.color) {
+    _ep.color.value = task.color || DEFAULT_COLOR;
+    _ep.color.classList.remove('active');
     _epInitialAutoColor = (task.color || DEFAULT_COLOR).toLowerCase();
   }
   // Update the auto-color circle
@@ -344,28 +356,26 @@ function saveEditPanel() {
   if (editPanelTaskId === null) return;
   const task = allTasks.find(t => t.id === editPanelTaskId);
   if (!task) return;
-  const nameVal = document.getElementById('ep-name').value.trim();
+  const nameVal = _ep.name.value.trim();
   task.name = nameVal || DEFAULT_TASK_NAME;
-  if (!nameVal) document.getElementById('ep-name').value = task.name;
-  const sv = document.getElementById('ep-start').value;
-  const fv = document.getElementById('ep-finish').value;
+  if (!nameVal) _ep.name.value = task.name;
+  const sv = _ep.start.value;
+  const fv = _ep.finish.value;
   let newStart = sv ? new Date(sv + 'T00:00:00') : null;
   let newFinish = fv ? new Date(fv + 'T00:00:00') : null;
   if (newStart && isNaN(newStart.getTime())) newStart = null;
   if (newFinish && isNaN(newFinish.getTime())) newFinish = null;
   if (newStart && newFinish && newStart > newFinish) {
-    const startEl = document.getElementById('ep-start');
-    const finishEl = document.getElementById('ep-finish');
     if (newStart.getTime() !== task.start?.getTime()) {
       newFinish = new Date(newStart);
-      finishEl.value = sv;
+      _ep.finish.value = sv;
     } else {
       newStart = new Date(newFinish);
-      startEl.value = fv;
+      _ep.start.value = fv;
     }
   }
   // Check if duration was manually changed
-  const epDurNum = document.getElementById('ep-duration-num');
+  const epDurNum = _ep.durNum;
   const newDurDays = parseInt(epDurNum.value) || 0;
   const oldDurDays = parseInt(task.duration) || 0;
   const durationManuallyChanged = newDurDays !== oldDurDays;
@@ -388,8 +398,7 @@ function saveEditPanel() {
     }
     task.duration = newDurDays + (newDurDays === 1 ? ' day' : ' days');
     // Update the finish date picker in the panel
-    const finishEl = document.getElementById('ep-finish');
-    if (finishEl) finishEl.value = dateToInputStr(task.finish);
+    if (_ep.finish) _ep.finish.value = dateToInputStr(task.finish);
     propagateDependencies(task);
   } else {
     task.finish = newFinish;
@@ -399,7 +408,7 @@ function saveEditPanel() {
       if (epDurNum) epDurNum.value = parseInt(task.duration) || 0;
     }
   }
-  const rawPct = parseInt(document.getElementById('ep-pct').value) || 0;
+  const rawPct = parseInt(_ep.pct.value) || 0;
   const manualPct = Math.max(0, Math.min(100, rawPct)) / 100;
   task.percentComplete = manualPct;
   // Only mark leaf tasks as manual progress; parent tasks should always auto-aggregate
@@ -407,12 +416,12 @@ function saveEditPanel() {
   if (isLeaf) task.manualProgress = true;
   const tags = document.querySelectorAll('#ep-tags .ep-tag.selected');
   task.labels = [...tags].map(t => t.dataset.label);
-  task.bucket = document.getElementById('ep-bucket').value;
-  task.priority = document.getElementById('ep-priority').value;
-  const newDepsVal = document.getElementById('ep-depends').value;
+  task.bucket = _ep.bucket.value;
+  task.priority = _ep.priority.value;
+  const newDepsVal = _ep.depends.value;
   if (newDepsVal && detectCircularDependency(task.id, newDepsVal)) {
     showToast('Circular dependency detected. This would create a cycle.', 'error');
-    document.getElementById('ep-depends').value = task.dependsOn;
+    _ep.depends.value = task.dependsOn;
     return;
   }
   // Validate dependency references exist
@@ -426,11 +435,11 @@ function saveEditPanel() {
     }
   }
   task.dependsOn = newDepsVal;
-  task.effort = document.getElementById('ep-effort').value;
-  task.notes = document.getElementById('ep-notes').value;
+  task.effort = _ep.effort.value;
+  task.notes = _ep.notes.value;
 
   // Calendar assignment with child propagation
-  const epCal = document.getElementById('ep-calendar');
+  const epCal = _ep.calendar;
   if (epCal) {
     const newCalId = epCal.value;
     if (newCalId !== task.calendarId) {
@@ -452,9 +461,8 @@ function saveEditPanel() {
   }
 
   // Color override — only set if user actually interacted with the color picker
-  const epColor = document.getElementById('ep-color');
-  if (epColor) {
-    const pickerVal = epColor.value.toLowerCase();
+  if (_ep.color) {
+    const pickerVal = _ep.color.value.toLowerCase();
     const newAutoColor = ((task.bucket && BUCKET_COLORS[task.bucket]) ? BUCKET_COLORS[task.bucket]
       : (task.labels?.length > 0 ? (LABEL_COLORS[task.labels[0]] || DEFAULT_COLOR) : DEFAULT_COLOR)).toLowerCase();
     // If picker still shows the auto-color from when the panel opened,
@@ -462,7 +470,7 @@ function saveEditPanel() {
     if (pickerVal === newAutoColor || pickerVal === _epInitialAutoColor) {
       task.colorOverride = '';
     } else {
-      task.colorOverride = epColor.value;
+      task.colorOverride = _ep.color.value;
     }
   }
 

@@ -135,6 +135,44 @@ async function addLabel() {
   renderSettingsBody(); scheduleSave();
 }
 
+/* ---------- ORG CHART COLOR PALETTE ---------- */
+
+function showOrgColorPalette(teamId, triggerEl) {
+  const old = document.querySelector('.org-color-palette');
+  if (old) old.remove();
+  const palette = ['#3B82F6','#22C55E','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316',
+                   '#6366F1','#06B6D4','#84CC16','#F43F5E','#A855F7','#0EA5E9','#D946EF','#64748B'];
+  const picker = document.createElement('div');
+  picker.className = 'org-color-palette';
+  palette.forEach(c => {
+    const swatch = document.createElement('span');
+    swatch.className = 'org-palette-swatch' + (teams[teamId] && teams[teamId].color === c ? ' active' : '');
+    swatch.style.background = c;
+    swatch.onclick = function(e) {
+      e.stopPropagation();
+      changeTeamColor(teamId, c);
+      picker.remove();
+    };
+    picker.appendChild(swatch);
+  });
+  // Position as fixed
+  const rect = triggerEl.getBoundingClientRect();
+  picker.style.position = 'fixed';
+  picker.style.left = rect.left + 'px';
+  picker.style.top = (rect.bottom + 4) + 'px';
+  document.body.appendChild(picker);
+  // Flip up if off-screen
+  const pRect = picker.getBoundingClientRect();
+  if (pRect.bottom > window.innerHeight) {
+    picker.style.top = (rect.top - pRect.height - 4) + 'px';
+  }
+  setTimeout(() => {
+    document.addEventListener('click', function close(e) {
+      if (!picker.contains(e.target)) { picker.remove(); document.removeEventListener('click', close); }
+    });
+  }, 0);
+}
+
 /* ---------- TEAM CRUD (used by Org Chart page) ---------- */
 
 function _teamAutoColor() {
@@ -208,11 +246,18 @@ function changeTeamColor(teamId, color) {
 
 function addTeamMember(teamId) {
   if (!teams[teamId]) return;
-  const name = prompt('Member name:');
-  if (!name || !name.trim()) return;
-  teams[teamId].members.push(name.trim());
+  // Add a placeholder member and re-render so the input appears
+  teams[teamId].members.push('New member');
   renderOrgChart();
   scheduleSave();
+  // Focus and select the last added member's input for immediate editing
+  requestAnimationFrame(() => {
+    const node = document.querySelector(`[data-team-id="${teamId}"]`);
+    if (!node) return;
+    const inputs = node.querySelectorAll('.org-node-member-name');
+    const last = inputs[inputs.length - 1];
+    if (last) { last.focus(); last.select(); }
+  });
 }
 
 function removeTeamMember(teamId, memberName) {
@@ -239,6 +284,41 @@ function renameTeamMember(teamId, oldName, newName) {
   });
   renderOrgChart();
   scheduleSave();
+}
+
+/* ---------- ORG CHART EXPORT ---------- */
+
+function exportOrgChartPNG() {
+  const tree = document.getElementById('org-tree');
+  if (!tree) return;
+  // Hide interactive elements before capture
+  tree.querySelectorAll('.org-node-btn, .org-node-add, .org-toolbar').forEach(el => el.style.display = 'none');
+  // Replace inputs with static text for cleaner look
+  tree.querySelectorAll('.org-node-name, .org-node-member-name').forEach(input => {
+    input.dataset.origBorder = input.style.border;
+    input.style.border = 'none';
+    input.style.background = 'transparent';
+  });
+  html2canvas(tree, { backgroundColor: null, scale: 2, useCORS: true }).then(canvas => {
+    // Restore interactive elements
+    tree.querySelectorAll('.org-node-btn, .org-node-add, .org-toolbar').forEach(el => el.style.display = '');
+    tree.querySelectorAll('.org-node-name, .org-node-member-name').forEach(input => {
+      input.style.border = input.dataset.origBorder || '';
+    });
+    // Download
+    const a = document.createElement('a');
+    const projName = (projects[currentProjectId]?.name || 'OrgChart').replace(/[^a-zA-Z0-9_-]/g, '_');
+    a.download = projName + '_OrgChart.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  }).catch(err => {
+    // Restore on error
+    tree.querySelectorAll('.org-node-btn, .org-node-add, .org-toolbar').forEach(el => el.style.display = '');
+    tree.querySelectorAll('.org-node-name, .org-node-member-name').forEach(input => {
+      input.style.border = input.dataset.origBorder || '';
+    });
+    showToast('Export failed: ' + err.message, 'error');
+  });
 }
 
 function renameBucket(oldName, newName) {

@@ -1444,7 +1444,7 @@ function renderOrgChart() {
   }
 
   // Build HTML
-  let html = `<div class="org-toolbar"><button class="add-row-btn" onclick="addRootTeam()">+ Add Team</button></div>`;
+  let html = `<div class="org-toolbar"><button class="add-row-btn" onclick="addRootTeam()">+ Add Team</button><button class="add-row-btn" onclick="exportOrgChartPNG()" style="margin-left:auto">Export PNG</button></div>`;
   html += `<div class="org-tree" id="org-tree">`;
   html += `<svg class="org-lines" id="org-lines"></svg>`;
 
@@ -1470,7 +1470,7 @@ function _buildOrgNode(id, team) {
   let html = `<div class="org-node" data-team-id="${id}">`;
   // Header: color dot, name, actions
   html += `<div class="org-node-header">`;
-  html += `<input type="color" class="org-node-color" value="${team.color}" onchange="changeTeamColor('${id}',this.value)" title="Team color">`;
+  html += `<span class="org-node-color" style="background:${team.color}" onclick="showOrgColorPalette('${id}',this)" title="Change color"></span>`;
   html += `<input type="text" class="org-node-name" value="${esc(team.name)}" onchange="renameTeam('${id}',this.value)">`;
   html += `<div class="org-node-actions">`;
   html += `<button class="org-node-btn" onclick="deleteTeam('${id}')" title="Delete team">${delSvg}</button>`;

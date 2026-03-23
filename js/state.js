@@ -70,7 +70,6 @@ let taskTree = [];
 const viewStates = {
   roadmap: { expandedSet: new Set(), collapsedSet: new Set(), allExpanded: false, visibleDepth: 1, filters: { search: '', label: '', bucket: '', team: '' } },
   dati: { expandedSet: new Set(), collapsedSet: new Set(), allExpanded: false, visibleDepth: 0, filters: { search: '', label: '', bucket: '', team: '' } },
-  dashboard: { filters: { search: '', label: '', bucket: '', team: '' } },
   org: { filters: { search: '', label: '', bucket: '', team: '' } }
 };
 function getState() { return viewStates[currentTab] || viewStates.roadmap; }
@@ -108,14 +107,8 @@ let calendars = {};
 let teams = {};
 /** @type {Object} Derived team color lookup { teamName: '#hex' } */
 const TEAM_COLORS = {};
-/** @type {'roadmap'|'dati'|'dashboard'|'org'} Active tab */
+/** @type {'roadmap'|'dati'|'org'} Active tab */
 let currentTab = 'roadmap';
-/** @type {'overview'|'kanban'} Dashboard display mode */
-let dashMode = 'overview';
-/** @type {number|null} Task ID for kanban scope (which L1 to show children of) */
-let dashScope = null;
-/** @type {Array} Dashboard navigation stack for kanban drill-down */
-let dashNavStack = [];
 
 /* =====================================================================
    4. UNDO & PERSISTENCE
@@ -290,8 +283,4 @@ function initDOMCache() {
   DOM.filterTeam = document.getElementById('filter-team');
   DOM.orgWrapper = document.getElementById('org-wrapper');
   DOM.orgChart = document.getElementById('org-chart');
-  DOM.dashWrapper = document.getElementById('dashboard-wrapper');
-  DOM.dashToolbar = document.getElementById('dash-toolbar');
-  DOM.dashContent = document.getElementById('dash-content');
-  DOM.dashSummary = document.getElementById('dash-summary');
 }

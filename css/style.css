@@ -672,19 +672,31 @@ input:focus-visible, textarea:focus-visible {
   outline-offset: -1px;
 }
 
-/* ===== ORG CHART ===== */
-.org-chart{max-width:1200px;margin:0 auto}
+/* ===== ORG CHART (Tree Builder) ===== */
+.org-chart{max-width:1400px;margin:0 auto}
 .org-empty{text-align:center;padding:60px 20px;color:var(--grey-txt);font-size:.9rem}
-.org-team{margin-bottom:28px}
-.org-team-header{padding:12px 16px;border-radius:10px;display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.org-team-name{font-weight:700;font-size:1rem}
-.org-team-count{font-size:.78rem;color:var(--grey-txt);margin-left:auto}
-.org-members{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.org-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 12px;text-align:center;transition:box-shadow .15s}
-.org-card:hover{box-shadow:var(--shadow-lg)}
-.org-avatar{width:42px;height:42px;border-radius:50%;color:#fff;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;margin:0 auto 8px}
-.org-card-name{font-weight:500;font-size:.82rem;color:var(--body-fg)}
-.org-card-tasks{font-size:.72rem;color:var(--grey-txt);margin-top:3px}
+.org-toolbar{padding:0 0 16px;display:flex;gap:8px}
+.org-tree{position:relative;overflow:auto;min-height:300px;padding-bottom:40px}
+.org-lines{position:absolute;top:0;left:0;pointer-events:none;z-index:0}
+.org-lines path{fill:none;stroke:var(--border);stroke-width:2}
+.org-level{display:flex;justify-content:center;gap:20px;margin-bottom:40px;position:relative;z-index:1}
+.org-node{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:200px;max-width:280px;box-shadow:0 1px 3px rgba(0,0,0,.08);transition:box-shadow .15s}
+.org-node:hover{box-shadow:var(--shadow-lg)}
+.org-node-header{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.org-node-color{width:16px;height:16px;border-radius:50%;cursor:pointer;border:none;padding:0;flex-shrink:0}
+.org-node-name{font-weight:600;font-size:.85rem;flex:1;border:none;background:transparent;color:var(--body-fg);font-family:inherit;padding:2px 4px;border-radius:4px;min-width:0}
+.org-node-name:focus{outline:none;background:var(--row-hover)}
+.org-node-actions{display:flex;gap:2px}
+.org-node-btn{background:none;border:none;cursor:pointer;color:var(--grey-txt);padding:3px;border-radius:4px;opacity:.4;transition:opacity .15s}
+.org-node-btn:hover{opacity:1;color:var(--red)}
+.org-node-members{display:flex;flex-direction:column;gap:1px;margin-top:6px;border-top:1px solid var(--border);padding-top:6px}
+.org-node-member{display:flex;align-items:center;gap:5px;padding:2px 0}
+.org-node-avatar{width:22px;height:22px;border-radius:50%;color:#fff;font-size:.55rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.org-node-member-name{flex:1;border:none;background:transparent;color:var(--body-fg);font-family:inherit;font-size:.78rem;padding:2px 4px;border-radius:4px;min-width:0}
+.org-node-member-name:focus{outline:none;background:var(--row-hover)}
+.org-node-task-count{font-size:.65rem;color:var(--grey-txt);min-width:14px;text-align:right}
+.org-node-add{font-size:.72rem;color:var(--grey-txt);cursor:pointer;padding:3px 0;border:none;background:none;font-family:inherit;display:block;text-align:left}
+.org-node-add:hover{color:var(--blue)}
 
 /* ===== BAR INITIALS (roadmap) ===== */
 .bar-initials{display:flex;gap:1px;align-items:center;position:absolute;right:4px;top:50%;transform:translateY(-50%);pointer-events:none}

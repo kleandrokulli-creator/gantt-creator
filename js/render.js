@@ -1410,37 +1410,126 @@ function refreshDataTableDOM() {
 }
 
 
-/* ---------- ORG CHART ---------- */
+/* ---------- ORG CHART (Interactive Tree Builder) ---------- */
 
 function renderOrgChart() {
   const container = DOM.orgChart;
   if (!container) return;
   const teamEntries = Object.entries(teams);
+
+  // Empty state
   if (teamEntries.length === 0) {
-    container.innerHTML = '<div class="org-empty">No teams configured yet.<br>Go to Settings &gt; Teams to create teams and add members.</div>';
+    container.innerHTML = `<div class="org-empty">
+      <div style="font-size:1.1rem;font-weight:600;margin-bottom:8px">Build your Org Chart</div>
+      <div style="margin-bottom:16px">Create teams, add members, and define the hierarchy.</div>
+      <button class="add-row-btn" onclick="addRootTeam()" style="font-size:.85rem;padding:8px 20px">+ Create First Team</button>
+    </div>`;
     return;
   }
-  let html = '';
-  teamEntries.forEach(([id, team]) => {
-    html += `<div class="org-team">`;
-    html += `<div class="org-team-header" style="background:${team.color}18;border-left:4px solid ${team.color}">`;
-    html += `<span class="org-team-name" style="color:${team.color}">${esc(team.name)}</span>`;
-    html += `<span class="org-team-count">${team.members.length} member${team.members.length !== 1 ? 's' : ''}</span>`;
+
+  // Build tree structure: find roots and children
+  function getChildren(parentId) {
+    return teamEntries.filter(([_, t]) => (t.parentId || null) === parentId).map(([id]) => id);
+  }
+  const roots = teamEntries.filter(([_, t]) => !t.parentId).map(([id]) => id);
+
+  // BFS to build levels
+  const levels = [];
+  let queue = [...roots];
+  while (queue.length > 0) {
+    levels.push([...queue]);
+    const next = [];
+    queue.forEach(id => getChildren(id).forEach(cid => next.push(cid)));
+    queue = next;
+  }
+
+  // Build HTML
+  let html = `<div class="org-toolbar"><button class="add-row-btn" onclick="addRootTeam()">+ Add Team</button></div>`;
+  html += `<div class="org-tree" id="org-tree">`;
+  html += `<svg class="org-lines" id="org-lines"></svg>`;
+
+  levels.forEach((levelIds, li) => {
+    html += `<div class="org-level" data-level="${li}">`;
+    levelIds.forEach(id => {
+      html += _buildOrgNode(id, teams[id]);
+    });
     html += `</div>`;
-    html += `<div class="org-members">`;
-    if (team.members.length === 0) {
-      html += `<div style="color:var(--grey-txt);font-size:.8rem;padding:8px">No members yet</div>`;
-    }
+  });
+
+  html += `</div>`;
+  container.innerHTML = html;
+
+  // Draw connecting lines after DOM is ready
+  requestAnimationFrame(() => drawOrgLines());
+}
+
+function _buildOrgNode(id, team) {
+  const memberCount = team.members.length;
+  const delSvg = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+
+  let html = `<div class="org-node" data-team-id="${id}">`;
+  // Header: color dot, name, actions
+  html += `<div class="org-node-header">`;
+  html += `<input type="color" class="org-node-color" value="${team.color}" onchange="changeTeamColor('${id}',this.value)" title="Team color">`;
+  html += `<input type="text" class="org-node-name" value="${esc(team.name)}" onchange="renameTeam('${id}',this.value)">`;
+  html += `<div class="org-node-actions">`;
+  html += `<button class="org-node-btn" onclick="deleteTeam('${id}')" title="Delete team">${delSvg}</button>`;
+  html += `</div></div>`;
+
+  // Sub-team add
+  html += `<button class="org-node-add" onclick="addSubTeam('${id}')">+ Add sub-team</button>`;
+
+  // Members
+  if (memberCount > 0) {
+    html += `<div class="org-node-members">`;
     team.members.forEach(m => {
       const initials = getInitials(m);
       const taskCount = allTasks.filter(t => (t.assigned || []).includes(m)).length;
-      html += `<div class="org-card">`;
-      html += `<div class="org-avatar" style="background:${team.color}">${initials}</div>`;
-      html += `<div class="org-card-name">${esc(m)}</div>`;
-      html += `<div class="org-card-tasks">${taskCount} task${taskCount !== 1 ? 's' : ''}</div>`;
+      html += `<div class="org-node-member">`;
+      html += `<span class="org-node-avatar" style="background:${team.color}">${initials}</span>`;
+      html += `<input type="text" class="org-node-member-name" value="${esc(m)}" onchange="renameTeamMember('${id}','${esc(m)}',this.value)">`;
+      html += `<span class="org-node-task-count">${taskCount}</span>`;
+      html += `<button class="org-node-btn" onclick="removeTeamMember('${id}','${esc(m)}')" title="Remove">${delSvg}</button>`;
       html += `</div>`;
     });
-    html += `</div></div>`;
+    html += `</div>`;
+  }
+
+  // Add member button
+  html += `<button class="org-node-add" onclick="addTeamMember('${id}')">+ Add member</button>`;
+  html += `</div>`;
+  return html;
+}
+
+function drawOrgLines() {
+  const svg = document.getElementById('org-lines');
+  const tree = document.getElementById('org-tree');
+  if (!svg || !tree) return;
+
+  const treeRect = tree.getBoundingClientRect();
+  svg.setAttribute('width', tree.scrollWidth);
+  svg.setAttribute('height', tree.scrollHeight);
+
+  let paths = '';
+  Object.entries(teams).forEach(([id, team]) => {
+    if (!team.parentId || !teams[team.parentId]) return;
+    const parentNode = tree.querySelector(`[data-team-id="${team.parentId}"]`);
+    const childNode = tree.querySelector(`[data-team-id="${id}"]`);
+    if (!parentNode || !childNode) return;
+
+    const pRect = parentNode.getBoundingClientRect();
+    const cRect = childNode.getBoundingClientRect();
+
+    // Center-bottom of parent, center-top of child (relative to tree container)
+    const px = pRect.left + pRect.width / 2 - treeRect.left;
+    const py = pRect.bottom - treeRect.top;
+    const cx = cRect.left + cRect.width / 2 - treeRect.left;
+    const cy = cRect.top - treeRect.top;
+
+    // Bezier curve
+    const midY = (py + cy) / 2;
+    paths += `<path d="M${px},${py} C${px},${midY} ${cx},${midY} ${cx},${cy}" />`;
   });
-  container.innerHTML = html;
+
+  svg.innerHTML = paths;
 }

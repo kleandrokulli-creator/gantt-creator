@@ -79,8 +79,6 @@ function renderSettingsBody() {
     </div>`;
   } else if (currentSettingsTab === 'calendar') {
     html = renderCalendarSettingsHTML();
-  } else if (currentSettingsTab === 'teams') {
-    html = renderTeamSettingsHTML();
   }
   body.innerHTML = html;
   refreshLegendIfOpen();
@@ -137,18 +135,32 @@ async function addLabel() {
   renderSettingsBody(); scheduleSave();
 }
 
-/* ---------- TEAM CRUD ---------- */
+/* ---------- TEAM CRUD (used by Org Chart page) ---------- */
 
-function addTeam() {
-  const id = 'team-' + Date.now();
+function _teamAutoColor() {
   const palette = ['#3B82F6','#22C55E','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316'];
-  const usedColors = Object.values(teams).map(t => t.color);
-  const color = palette.find(c => !usedColors.includes(c)) || palette[0];
-  teams[id] = { name: 'New team', color, members: [] };
+  const used = Object.values(teams).map(t => t.color);
+  return palette.find(c => !used.includes(c)) || palette[0];
+}
+
+function addRootTeam() {
+  const id = 'team-' + Date.now();
+  teams[id] = { name: 'New team', color: _teamAutoColor(), parentId: null, members: [] };
   rebuildTeamColors();
-  renderSettingsBody();
+  renderOrgChart();
   scheduleSave();
 }
+
+function addSubTeam(parentId) {
+  if (!teams[parentId]) return;
+  const id = 'team-' + Date.now();
+  teams[id] = { name: 'New sub-team', color: _teamAutoColor(), parentId: parentId, members: [] };
+  rebuildTeamColors();
+  renderOrgChart();
+  scheduleSave();
+}
+
+function addTeam() { addRootTeam(); }
 
 function renameTeam(teamId, newName) {
   if (!teams[teamId] || !newName.trim()) return;
@@ -160,17 +172,28 @@ function renameTeam(teamId, newName) {
 
 function deleteTeam(teamId) {
   if (!teams[teamId]) return;
-  const teamMembers = teams[teamId].members;
+  // Collect all descendant team IDs recursively
+  const toDelete = [teamId];
+  function collectChildren(pid) {
+    Object.entries(teams).forEach(([id, t]) => {
+      if (t.parentId === pid) { toDelete.push(id); collectChildren(id); }
+    });
+  }
+  collectChildren(teamId);
+  // Unassign all members from tasks
+  const allMembers = new Set();
+  toDelete.forEach(id => { if (teams[id]) teams[id].members.forEach(m => allMembers.add(m)); });
   allTasks.forEach(t => {
     if (t.assigned && t.assigned.length > 0) {
-      t.assigned = t.assigned.filter(m => !teamMembers.includes(m));
+      t.assigned = t.assigned.filter(m => !allMembers.has(m));
     }
   });
-  delete teams[teamId];
+  // Delete teams
+  toDelete.forEach(id => delete teams[id]);
   rebuildTeamColors();
   populateFilterDropdowns();
-  renderSettingsBody();
-  renderAll();
+  renderOrgChart();
+  if (currentTab === 'roadmap') renderAll();
   if (currentTab === 'dati') renderDataTable();
   scheduleSave();
 }
@@ -179,8 +202,7 @@ function changeTeamColor(teamId, color) {
   if (!teams[teamId]) return;
   teams[teamId].color = color;
   rebuildTeamColors();
-  renderAll();
-  if (currentTab === 'dati') renderDataTable();
+  renderOrgChart();
   scheduleSave();
 }
 
@@ -189,7 +211,7 @@ function addTeamMember(teamId) {
   const name = prompt('Member name:');
   if (!name || !name.trim()) return;
   teams[teamId].members.push(name.trim());
-  renderSettingsBody();
+  renderOrgChart();
   scheduleSave();
 }
 
@@ -201,9 +223,7 @@ function removeTeamMember(teamId, memberName) {
       t.assigned = t.assigned.filter(m => m !== memberName);
     }
   });
-  renderSettingsBody();
-  renderAll();
-  if (currentTab === 'dati') renderDataTable();
+  renderOrgChart();
   scheduleSave();
 }
 
@@ -217,6 +237,7 @@ function renameTeamMember(teamId, oldName, newName) {
       if (i >= 0) t.assigned[i] = newName.trim();
     }
   });
+  renderOrgChart();
   scheduleSave();
 }
 

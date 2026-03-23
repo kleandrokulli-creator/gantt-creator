@@ -317,7 +317,7 @@ function renderTimelineHeader(dpx) {
     if (x >= -50) {
       const wNum = getWeekNumber(wd);
       html += `<div class="tl-week-label" style="left:${x}px;width:${Math.max(wWidth, 10)}px">W${wNum}</div>`;
-      if (wWidth > 22) {
+      if (wWidth > 22 && currentZoom !== 'day') {
         const monStr = wd.getDate();
         const friStr = wFri.getDate();
         const spansBoundary = wd.getMonth() !== wFri.getMonth();
@@ -344,7 +344,8 @@ function renderTimelineHeader(dpx) {
       const dayOfWeek = dd.getDay();
       const isWE = dayOfWeek === 0 || dayOfWeek === 6;
       if (dayW > 18) {
-        const label = dayW > 30 ? dayNames[dayOfWeek] : dd.getDate();
+        const dn = dd.getDate();
+        const label = dayW > 55 ? dayNames[dayOfWeek] + ' ' + dn : dayW > 30 ? dayNames[dayOfWeek][0] + ' ' + dn : dn;
         html += `<div class="tl-day-label${isWE ? ' weekend' : ''}" style="left:${x}px;width:${dayW}px">${label}</div>`;
       }
       if (isWE) {

@@ -434,9 +434,20 @@ function saveEditPanel() {
   if (epCal) {
     const newCalId = epCal.value;
     if (newCalId !== task.calendarId) {
+      // Count children that will be affected
+      const prefix = task.outline + '.';
+      const idx = allTasks.indexOf(task);
+      let childCount = 0;
+      for (let i = idx + 1; i < allTasks.length; i++) {
+        if (allTasks[i].outline.startsWith(prefix)) childCount++;
+        else break;
+      }
       assignCalendarWithChildren(task, newCalId);
       invalidateHolidayCache();
       recalcFinishDates();
+      if (childCount > 0) {
+        showToast(`Calendar updated for ${childCount} child task(s)`, 'info', 2500);
+      }
     }
   }
 

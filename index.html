@@ -6,7 +6,7 @@
 <title>PlanView - Gantt Roadmap</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=39">
+<link rel="stylesheet" href="css/style.css?v=42">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/gitbrent/PptxGenJS@3.12.0/dist/pptxgen.bundle.js"></script>
@@ -52,7 +52,7 @@
   <!-- TOOLBAR -->
   <div class="toolbar" id="toolbar">
     <!-- GROUP 1: Search & Filters -->
-    <div class="tb-group">
+    <div class="tb-group" data-label="Search">
       <div class="search-box" role="search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         <input type="text" id="search-input" placeholder="Search tasks..." aria-label="Search tasks" oninput="applyFilters()">
@@ -64,43 +64,43 @@
     <div class="sep tab-roadmap"></div>
 
     <!-- GROUP 2: Zoom & Calendar (Roadmap only) -->
-    <div class="tb-group tab-roadmap">
+    <div class="tb-group tab-roadmap" data-label="Zoom">
       <button onclick="setZoom('month')" id="zoom-month" class="active">Month</button>
       <button onclick="setZoom('week')" id="zoom-week">Week</button>
       <button onclick="setZoom('day')" id="zoom-day">Day</button>
-      <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" title="Toggle working days / calendar days">
+      <button onclick="toggleWorkingDays()" id="working-days-btn" class="btn-icon btn-sm" data-tooltip="Switch between counting only Mon-Fri or all calendar days">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
         <span>Working Days</span>
       </button>
-      <button onclick="toggleSplitBars()" id="split-bars-btn" class="btn-icon btn-sm active" title="Toggle bar splitting around holidays">
+      <button onclick="toggleSplitBars()" id="split-bars-btn" class="btn-icon btn-sm active" data-tooltip="Split task bars around holidays and closures">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h6M15 12h6"/><rect x="9" y="8" width="6" height="8" rx="1" stroke-dasharray="2 2"/></svg>
-        <span>Split</span>
+        <span>Split Holidays</span>
       </button>
     </div>
 
     <div class="sep tab-roadmap"></div>
 
     <!-- GROUP 3: View controls (Roadmap only) -->
-    <div class="tb-group tab-roadmap">
+    <div class="tb-group tab-roadmap" data-label="View">
       <select id="depth-select" onchange="setDepth(this.value)" title="Visible depth levels">
         <option value="1" selected>Level 1</option>
         <option value="2">Levels 1-2</option>
         <option value="3">Levels 1-3</option>
         <option value="0">All levels</option>
       </select>
-      <button onclick="toggleMilestoneInline()" id="ms-inline-btn" class="btn-icon" title="Milestone inline/separate">
+      <button onclick="toggleMilestoneInline()" id="ms-inline-btn" class="btn-icon" data-tooltip="Show milestones inline on task bars or as separate rows">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
         <span id="ms-inline-label">MS Inline</span>
       </button>
-      <button onclick="toggleArrows()" id="arrows-btn" class="btn-icon" title="Toggle dependency arrows">
+      <button onclick="toggleArrows()" id="arrows-btn" class="btn-icon" data-tooltip="Show or hide dependency arrows between tasks">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-        <span id="arrows-label">Deps</span>
+        <span id="arrows-label">Dependencies</span>
       </button>
-      <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon" title="Show/hide legend">
+      <button onclick="toggleLegend()" id="legend-toggle" class="btn-icon" data-tooltip="Show or hide the color legend">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Legend
       </button>
-      <button onclick="scrollToToday()" class="btn-icon" title="Scroll to today">
+      <button onclick="scrollToToday()" class="btn-icon" data-tooltip="Scroll the roadmap to today's date">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
         Today
       </button>
@@ -109,8 +109,8 @@
     <div class="sep"></div>
 
     <!-- GROUP 4: Actions (shared) -->
-    <div class="tb-group">
-      <button onclick="addNewTask()" class="btn-icon" title="Add task">
+    <div class="tb-group" data-label="Actions">
+      <button onclick="addNewTask()" class="btn-icon" data-tooltip="Add a new task row to the project">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
         Add
       </button>
@@ -118,7 +118,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8l4-4 4 4M4 16l4 4 4-4"/></svg>
         <span id="expand-label">Expand</span>
       </button>
-      <button onclick="undoEdit()" class="btn-icon" id="btn-undo" title="Undo (Ctrl+Z)">
+      <button onclick="undoEdit()" class="btn-icon" id="btn-undo" data-tooltip="Undo the last change (Ctrl+Z)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10h13a4 4 0 010 8H7M3 10l4-4M3 10l4 4"/></svg>
         Undo
       </button>
@@ -130,7 +130,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><path d="M1 1l22 22"/></svg>
         Unmute
       </button>
-      <button onclick="openCalendarAssignModal()" class="btn-icon" title="Assign calendars to phases">
+      <button onclick="openCalendarAssignModal()" class="btn-icon" data-tooltip="Assign working calendars and holidays to phases">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>
         Calendars
       </button>
@@ -139,13 +139,13 @@
     <div class="sep"></div>
 
     <!-- GROUP 5: Save Template, Export, Settings -->
-    <div class="tb-group">
-      <button onclick="saveAsTemplate()" class="btn-icon" title="Save current project as reusable template">
+    <div class="tb-group" data-label="Export">
+      <button onclick="saveAsTemplate()" class="btn-icon" data-tooltip="Save as a reusable template">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
         Save Template
       </button>
       <div class="tb-dropdown" id="export-dropdown">
-        <button onclick="toggleExportMenu()" class="btn-icon" title="Export options">
+        <button onclick="toggleExportMenu()" class="btn-icon" data-tooltip="Export project (Excel, PNG, PPTX, HTML)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
           Export
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;margin-left:-2px"><path d="M6 9l6 6 6-6"/></svg>
@@ -173,7 +173,7 @@
           </button>
         </div>
       </div>
-      <button onclick="openSettings()" class="btn-icon" title="Settings">
+      <button onclick="openSettings()" class="btn-icon" data-tooltip="Project settings (labels, buckets, calendars)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         Settings
       </button>
@@ -290,19 +290,19 @@
 </div>
 
 <!-- SCRIPTS (order matters: state → utils → dialog → data → render → ui → app) -->
-<script src="js/state.js?v=39"></script>
-<script src="js/storage.js?v=39"></script>
-<script src="js/utils.js?v=39"></script>
-<script src="js/dialog.js?v=39"></script>
-<script src="js/data.js?v=39"></script>
-<script src="js/render.js?v=39"></script>
-<script src="js/ui.js?v=39"></script>
-<script src="js/ui-editpanel.js?v=39"></script>
-<script src="js/ui-settings.js?v=39"></script>
-<script src="js/ui-tasks.js?v=39"></script>
-<script src="js/ui-datatable.js?v=39"></script>
-<script src="js/export.js?v=39"></script>
-<script src="js/app.js?v=39"></script>
+<script src="js/state.js?v=42"></script>
+<script src="js/storage.js?v=42"></script>
+<script src="js/utils.js?v=42"></script>
+<script src="js/dialog.js?v=42"></script>
+<script src="js/data.js?v=42"></script>
+<script src="js/render.js?v=42"></script>
+<script src="js/ui.js?v=42"></script>
+<script src="js/ui-editpanel.js?v=42"></script>
+<script src="js/ui-settings.js?v=42"></script>
+<script src="js/ui-tasks.js?v=42"></script>
+<script src="js/ui-datatable.js?v=42"></script>
+<script src="js/export.js?v=42"></script>
+<script src="js/app.js?v=42"></script>
 <script>
 // Pre-cache JS sources in localStorage for HTML export
 (function() {

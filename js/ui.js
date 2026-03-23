@@ -393,10 +393,10 @@ function toggleArrows() {
   if (btn && lbl) {
     if (showArrows) {
       btn.classList.remove('dim');
-      lbl.innerText = 'Deps';
+      lbl.innerText = 'Dependencies';
     } else {
       btn.classList.add('dim');
-      lbl.innerText = 'Deps';
+      lbl.innerText = 'Dependencies';
     }
   }
   renderAll();
@@ -789,3 +789,40 @@ function toggleDataEditMode() {
 }
 
 
+/* ---------- CUSTOM TOOLBAR TOOLTIPS ---------- */
+(function initToolbarTooltips() {
+  const tip = document.createElement('div');
+  tip.className = 'custom-tooltip';
+  document.body.appendChild(tip);
+
+  let showTimer = null;
+
+  function show(el) {
+    const text = el.getAttribute('data-tooltip');
+    if (!text) return;
+    tip.textContent = text;
+    const rect = el.getBoundingClientRect();
+    tip.style.left = rect.left + rect.width / 2 + 'px';
+    tip.style.top = rect.top - 8 + 'px';
+    tip.style.transform = 'translate(-50%, -100%)';
+    tip.classList.add('visible');
+  }
+
+  function hide() {
+    clearTimeout(showTimer);
+    showTimer = null;
+    tip.classList.remove('visible');
+  }
+
+  document.addEventListener('mouseover', function(e) {
+    const el = e.target.closest('[data-tooltip]');
+    if (!el) { hide(); return; }
+    if (showTimer) return;
+    showTimer = setTimeout(() => show(el), 400);
+  });
+
+  document.addEventListener('mouseout', function(e) {
+    const el = e.target.closest('[data-tooltip]');
+    if (el) hide();
+  });
+})();

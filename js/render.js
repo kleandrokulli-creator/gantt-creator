@@ -496,20 +496,18 @@ function _renderRowGrid(rowH, totalRows) {
 }
 
 function _buildBarInitials(task, barW) {
-  const members = task.assigned || [];
-  if (members.length === 0 || barW < 70) return '';
-  const allMembers = typeof getAllTeamMembers === 'function' ? getAllTeamMembers() : [];
+  const assignedTeams = task.assigned || [];
+  if (assignedTeams.length === 0 || barW < 70) return '';
   const maxShow = 3;
   let html = '<div class="bar-initials">';
-  const toShow = members.slice(0, maxShow);
-  toShow.forEach(m => {
-    const info = allMembers.find(x => x.name === m);
-    const c = info ? info.teamColor : '#64748B';
-    const initials = typeof getInitials === 'function' ? getInitials(m) : m.charAt(0).toUpperCase();
-    html += `<span class="bar-initial" style="background:${c}" title="${esc(m)}">${initials}</span>`;
+  const toShow = assignedTeams.slice(0, maxShow);
+  toShow.forEach(teamName => {
+    const c = TEAM_COLORS[teamName] || '#64748B';
+    const initials = typeof getInitials === 'function' ? getInitials(teamName) : teamName.charAt(0).toUpperCase();
+    html += `<span class="bar-initial" style="background:${c}" title="${esc(teamName)}">${initials}</span>`;
   });
-  if (members.length > maxShow) {
-    html += `<span class="bar-initial-more">+${members.length - maxShow}</span>`;
+  if (assignedTeams.length > maxShow) {
+    html += `<span class="bar-initial-more">+${assignedTeams.length - maxShow}</span>`;
   }
   html += '</div>';
   return html;
@@ -973,13 +971,11 @@ function _buildDTEditCell(col, t, ctx, bucketsArr) {
     case 'notes': return `<td data-col="notes" title="${esc(t.notes || '')}"><input type="text" value="${esc(t.notes || '')}" data-field="notes" data-id="${t.id}" title="${esc(t.notes || '')}"></td>`;
     case 'assigned': {
       const assignedArr = t.assigned || [];
-      const allMem = typeof getAllTeamMembers === 'function' ? getAllTeamMembers() : [];
-      const assignedTags = assignedArr.map(m => {
-        const info = allMem.find(x => x.name === m);
-        const c = info ? info.teamColor : '#64748B';
-        return `<span class="tag" style="background:${c}22;color:${c}">${esc(typeof getShortName === 'function' ? getShortName(m) : m)}</span>`;
+      const assignedTags = assignedArr.map(teamName => {
+        const c = TEAM_COLORS[teamName] || '#64748B';
+        return `<span class="tag" style="background:${c}22;color:${c}">${esc(teamName)}</span>`;
       }).join('');
-      return `<td data-col="assigned"><div class="cell-tags cell-tags-edit" data-id="${t.id}" onclick="openDataMemberPicker(this,${t.id})">${assignedTags}<span class="tag-add-hint">+</span></div></td>`;
+      return `<td data-col="assigned"><div class="cell-tags cell-tags-edit" data-id="${t.id}" onclick="openDataTeamPicker(this,${t.id})">${assignedTags}<span class="tag-add-hint">+</span></div></td>`;
     }
     case 'status': return `<td data-col="status"><select data-field="status" data-id="${t.id}">${STATUS_OPTIONS.map(s => `<option value="${s}" ${s === (t.status||'') ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></td>`;
     case 'cost': return `<td data-col="cost"><input type="text" value="${esc(t.cost || '')}" data-field="cost" data-id="${t.id}" placeholder="..."></td>`;
@@ -1019,11 +1015,9 @@ function _buildDTReadCell(col, t, ctx) {
     case 'assigned': {
       const assignedArr = t.assigned || [];
       if (assignedArr.length === 0) return `<td data-col="assigned"><span class="ro-text" style="color:var(--grey-txt)">—</span></td>`;
-      const allMem = typeof getAllTeamMembers === 'function' ? getAllTeamMembers() : [];
-      const tags = assignedArr.map(m => {
-        const info = allMem.find(x => x.name === m);
-        const c = info ? info.teamColor : '#64748B';
-        return `<span class="tag" style="background:${c}22;color:${c}">${esc(typeof getShortName === 'function' ? getShortName(m) : m)}</span>`;
+      const tags = assignedArr.map(teamName => {
+        const c = TEAM_COLORS[teamName] || '#64748B';
+        return `<span class="tag" style="background:${c}22;color:${c}">${esc(teamName)}</span>`;
       }).join('');
       return `<td data-col="assigned"><div class="cell-tags">${tags}</div></td>`;
     }

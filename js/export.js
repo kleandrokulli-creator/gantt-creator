@@ -847,6 +847,15 @@ function showTooltip(e, id) {
   if (task.bucket) html += '<div class="tt-row" style="margin-top:.3rem"><span class="tt-label">Bucket:</span><span>' + esc(task.bucket) + '</span></div>';
   if (task.priority) html += '<div class="tt-row"><span class="tt-label">Priority:</span><span>' + esc(task.priority) + '</span></div>';
   if (task.dependsOn) html += '<div class="tt-row"><span class="tt-label">Depends on:</span><span>' + esc(task.dependsOn) + '</span></div>';
+  var assignedTeams = task.assigned || [];
+  if (assignedTeams.length > 0) {
+    html += '<div class="tt-tags" style="margin-top:.3rem">';
+    assignedTeams.forEach(function(tn) {
+      var c = TEAM_COLORS[tn] || '#64748B';
+      html += '<span class="tt-tag" style="background:' + c + '22;color:' + c + ';border:1px solid ' + c + '44">' + esc(tn) + '</span>';
+    });
+    html += '</div>';
+  }
   DOM.tooltip.innerHTML = html;
   DOM.tooltip.classList.add('visible');
   moveTooltip(e);

@@ -76,6 +76,15 @@ function showTooltip(e, taskId) {
   if (task.bucket) html += `<div class="tt-row" style="margin-top:.3rem"><span class="tt-label">Bucket:</span><span>${esc(task.bucket)}</span></div>`;
   if (task.priority) html += `<div class="tt-row"><span class="tt-label">Priority:</span><span>${esc(task.priority)}</span></div>`;
   if (task.dependsOn) html += `<div class="tt-row"><span class="tt-label">Depends on:</span><span>${esc(task.dependsOn)}</span></div>`;
+  const assignedTeams = task.assigned || [];
+  if (assignedTeams.length > 0) {
+    html += '<div class="tt-tags" style="margin-top:.3rem">';
+    assignedTeams.forEach(tn => {
+      const c = TEAM_COLORS[tn] || '#64748B';
+      html += `<span class="tt-tag" style="background:${c}22;color:${c};border:1px solid ${c}44">${esc(tn)}</span>`;
+    });
+    html += '</div>';
+  }
   DOM.tooltip.innerHTML = html;
   DOM.tooltip.classList.add('visible');
   moveTooltip(e);
@@ -387,11 +396,8 @@ function taskMatchesFilter(task) {
     if (labelF && !t.labels.includes(labelF)) return false;
     if (bucketF && t.bucket !== bucketF) return false;
     if (teamF) {
-      const teamObj = Object.values(teams).find(tm => tm.name === teamF);
-      if (teamObj) {
-        const assigned = t.assigned || [];
-        if (!assigned.some(m => teamObj.members.includes(m))) return false;
-      }
+      const assigned = t.assigned || [];
+      if (!assigned.includes(teamF)) return false;
     }
     return true;
   };

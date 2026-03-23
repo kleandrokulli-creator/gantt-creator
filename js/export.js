@@ -843,7 +843,9 @@ function hideTooltip() {
 function navigateInto(taskId) {
   const task = allTasks.find(t => t.id === taskId);
   if (!task || !task.children || task.children.length === 0) return;
-  navStack.push({ taskId: task.id, label: task.name });
+  navStack.push({ task: task, taskId: task.id, label: task.name });
+  getState().expandedSet.clear();
+  getState().collapsedSet.clear();
   renderAll();
 }
 function navigateBack() {

@@ -1527,3 +1527,294 @@ function drawOrgLines() {
 
   svg.innerHTML = paths;
 }
+
+
+/* =====================================================================
+   DASHBOARD — Intelligent project analytics
+   ===================================================================== */
+
+const HEALTH_COLORS = { green: '#16A34A', yellow: '#EAB308', red: '#DC2626', grey: '#94A3B8' };
+const HEALTH_BG     = { green: 'rgba(22,163,74,.1)', yellow: 'rgba(234,179,8,.1)', red: 'rgba(220,38,38,.1)', grey: 'rgba(148,163,184,.08)' };
+
+/** Compute health status of a task based on progress vs elapsed time */
+function getTaskHealth(task) {
+  if (!task.start || !task.finish) return 'grey';
+  const now = new Date();
+  const pct = task.percentComplete || 0;
+  if (pct >= 1) return 'green';
+  if (now < task.start) return 'grey';
+  const elapsed = (now - task.start) / (task.finish - task.start);
+  if (elapsed > 1) return 'red';
+  if (pct >= elapsed * 0.7) return 'green';
+  if (pct >= elapsed * 0.4) return 'yellow';
+  return 'red';
+}
+
+/** Count descendants of a task (by outline prefix) */
+function _countDescendants(task) {
+  const prefix = task.outline + '.';
+  return allTasks.filter(t => t.outline.startsWith(prefix) && !t.isMilestone).length;
+}
+
+/** Count completed descendants */
+function _countCompleted(task) {
+  const prefix = task.outline + '.';
+  return allTasks.filter(t => t.outline.startsWith(prefix) && !t.isMilestone && (t.percentComplete || 0) >= 1).length;
+}
+
+/** Compute weighted average completion of descendants */
+function _avgCompletion(tasks) {
+  if (tasks.length === 0) return 0;
+  const sum = tasks.reduce((s, t) => s + (t.percentComplete || 0), 0);
+  return sum / tasks.length;
+}
+
+function renderDashboard() {
+  const el = DOM.dashContent;
+  if (!el) return;
+
+  let html = '<div class="dash-page">';
+  html += _buildDashKPIs();
+  html += _buildDashProjectHealth();
+  html += '<div class="dash-grid-2col">';
+  html += '<div class="dash-col">' + _buildDashLabelBreakdown() + _buildDashOverdue() + '</div>';
+  html += '<div class="dash-col">' + _buildDashTeamWorkload() + _buildDashMilestones() + '</div>';
+  html += '</div>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+/* ---------- 1. KPI Cards ---------- */
+function _buildDashKPIs() {
+  const tasks = allTasks.filter(t => !t.isMilestone);
+  const total = tasks.length;
+  const avgPct = Math.round(_avgCompletion(tasks) * 100);
+  const l1Tasks = allTasks.filter(t => t.depth === 1 && !t.isMilestone);
+  const onTrack = l1Tasks.filter(t => getTaskHealth(t) === 'green').length;
+  const now = new Date();
+  const overdue = tasks.filter(t => t.finish && t.finish < now && (t.percentComplete || 0) < 1).length;
+
+  return `<div class="dash-kpi-row">
+    <div class="dash-kpi">
+      <div class="dash-kpi-icon" style="background:rgba(59,130,246,.1);color:#3B82F6">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      </div>
+      <div class="dash-kpi-value">${total}</div>
+      <div class="dash-kpi-label">Total Tasks</div>
+    </div>
+    <div class="dash-kpi">
+      <div class="dash-kpi-icon" style="background:rgba(99,102,241,.1);color:#6366F1">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      </div>
+      <div class="dash-kpi-value">${avgPct}%</div>
+      <div class="dash-kpi-label">Completion</div>
+    </div>
+    <div class="dash-kpi">
+      <div class="dash-kpi-icon" style="background:rgba(22,163,74,.1);color:#16A34A">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+      </div>
+      <div class="dash-kpi-value">${onTrack}<span class="dash-kpi-sub">/${l1Tasks.length}</span></div>
+      <div class="dash-kpi-label">On Track</div>
+    </div>
+    <div class="dash-kpi">
+      <div class="dash-kpi-icon" style="background:rgba(220,38,38,.1);color:#DC2626">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      </div>
+      <div class="dash-kpi-value">${overdue}</div>
+      <div class="dash-kpi-label">Overdue</div>
+    </div>
+  </div>`;
+}
+
+/* ---------- 2. Project Health ---------- */
+function _buildDashProjectHealth() {
+  const l1Tasks = allTasks.filter(t => t.depth === 1 && !t.isMilestone);
+  if (l1Tasks.length === 0) return '';
+
+  let rows = '';
+  l1Tasks.forEach(task => {
+    const pct = Math.round((task.percentComplete || 0) * 100);
+    const health = getTaskHealth(task);
+    const hColor = HEALTH_COLORS[health];
+    const hBg = HEALTH_BG[health];
+    const totalSub = _countDescendants(task);
+    const completedSub = _countCompleted(task);
+    const teamTags = (task.assigned || []).map(tn => {
+      const c = TEAM_COLORS[tn] || '#64748B';
+      return `<span class="tag" style="background:${c}22;color:${c};font-size:.6rem;padding:1px 5px">${esc(tn)}</span>`;
+    }).join('');
+
+    // L2 children for accordion
+    const l2Children = task.children ? task.children.filter(c => !c.isMilestone) : [];
+    let l2Html = '';
+    if (l2Children.length > 0) {
+      l2Html = '<div class="dash-health-sub" style="display:none">';
+      l2Children.forEach(child => {
+        const cPct = Math.round((child.percentComplete || 0) * 100);
+        const cHealth = getTaskHealth(child);
+        const cColor = HEALTH_COLORS[cHealth];
+        l2Html += `<div class="dash-bar-row dash-bar-sub">
+          <span class="dash-bar-name">${esc(child.name)}</span>
+          <div class="dash-bar-track"><div class="dash-bar-fill" style="width:${cPct}%;background:${cColor}"></div></div>
+          <span class="dash-bar-pct" style="color:${cColor}">${cPct}%</span>
+        </div>`;
+      });
+      l2Html += '</div>';
+    }
+
+    const expandBtn = l2Children.length > 0
+      ? `<svg class="dash-expand-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`
+      : '';
+
+    rows += `<div class="dash-health-item" ${l2Children.length > 0 ? 'onclick="this.classList.toggle(\'open\')"' : ''}>
+      <div class="dash-bar-row">
+        ${expandBtn}
+        <span class="dash-bar-name dash-bar-name-l1">${esc(task.name)}</span>
+        <div class="dash-bar-track"><div class="dash-bar-fill" style="width:${pct}%;background:${hColor}"></div></div>
+        <span class="dash-bar-pct" style="color:${hColor}">${pct}%</span>
+        <span class="dash-bar-meta">${completedSub}/${totalSub}</span>
+        <span class="dash-health-badge" style="background:${hBg};color:${hColor}">${health === 'green' ? 'On Track' : health === 'yellow' ? 'At Risk' : health === 'red' ? 'Behind' : 'Not Started'}</span>
+        ${teamTags ? `<span class="dash-bar-teams">${teamTags}</span>` : ''}
+      </div>
+      ${l2Html}
+    </div>`;
+  });
+
+  return `<div class="dash-section">
+    <div class="dash-section-title">Project Health</div>
+    <div class="dash-health-list">${rows}</div>
+  </div>`;
+}
+
+/* ---------- 3. Label Breakdown ---------- */
+function _buildDashLabelBreakdown() {
+  const labelSet = {};
+  allTasks.forEach(t => {
+    if (t.isMilestone) return;
+    (t.labels || []).forEach(l => {
+      if (!labelSet[l]) labelSet[l] = { total: 0, sumPct: 0 };
+      labelSet[l].total++;
+      labelSet[l].sumPct += (t.percentComplete || 0);
+    });
+  });
+  const entries = Object.entries(labelSet).sort((a, b) => (b[1].sumPct / b[1].total) - (a[1].sumPct / a[1].total));
+  if (entries.length === 0) return '';
+
+  let rows = '';
+  entries.forEach(([label, data]) => {
+    const pct = Math.round((data.sumPct / data.total) * 100);
+    const lbl = labelColors.find(l => l.name === label);
+    const color = lbl ? lbl.color : '#64748B';
+    rows += `<div class="dash-bar-row">
+      <span class="dash-bar-dot" style="background:${color}"></span>
+      <span class="dash-bar-name">${esc(label)}</span>
+      <div class="dash-bar-track"><div class="dash-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="dash-bar-pct">${pct}%</span>
+      <span class="dash-bar-meta">${data.total}</span>
+    </div>`;
+  });
+
+  return `<div class="dash-section">
+    <div class="dash-section-title">Completion by Label</div>
+    ${rows}
+  </div>`;
+}
+
+/* ---------- 4. Team Workload ---------- */
+function _buildDashTeamWorkload() {
+  const teamSet = {};
+  allTasks.forEach(t => {
+    if (t.isMilestone) return;
+    (t.assigned || []).forEach(tn => {
+      if (!teamSet[tn]) teamSet[tn] = { count: 0, sumPct: 0 };
+      teamSet[tn].count++;
+      teamSet[tn].sumPct += (t.percentComplete || 0);
+    });
+  });
+  const entries = Object.entries(teamSet).sort((a, b) => b[1].count - a[1].count);
+  if (entries.length === 0) return `<div class="dash-section"><div class="dash-section-title">Team Workload</div><div class="dash-empty">No teams assigned yet</div></div>`;
+
+  const maxCount = Math.max(...entries.map(e => e[1].count));
+  let rows = '';
+  entries.forEach(([team, data]) => {
+    const pct = Math.round((data.sumPct / data.count) * 100);
+    const color = TEAM_COLORS[team] || '#64748B';
+    const barW = Math.round((data.count / maxCount) * 100);
+    rows += `<div class="dash-bar-row">
+      <span class="dash-bar-dot" style="background:${color}"></span>
+      <span class="dash-bar-name">${esc(team)}</span>
+      <div class="dash-bar-track"><div class="dash-bar-fill" style="width:${barW}%;background:${color}"></div></div>
+      <span class="dash-bar-pct">${data.count}</span>
+      <span class="dash-bar-meta">${pct}%</span>
+    </div>`;
+  });
+
+  return `<div class="dash-section">
+    <div class="dash-section-title">Team Workload</div>
+    ${rows}
+  </div>`;
+}
+
+/* ---------- 5. Overdue & At Risk ---------- */
+function _buildDashOverdue() {
+  const now = new Date();
+  const overdue = allTasks
+    .filter(t => !t.isMilestone && t.finish && t.finish < now && (t.percentComplete || 0) < 1)
+    .map(t => {
+      const daysLate = Math.ceil((now - t.finish) / 86400000);
+      const parent = allTasks.find(p => p.depth === 1 && t.outline.startsWith(p.outline));
+      return { task: t, daysLate, parentName: parent ? parent.name : '' };
+    })
+    .sort((a, b) => b.daysLate - a.daysLate)
+    .slice(0, 10);
+
+  if (overdue.length === 0) return `<div class="dash-section"><div class="dash-section-title">Overdue Tasks</div><div class="dash-empty">No overdue tasks</div></div>`;
+
+  let rows = '';
+  overdue.forEach(({ task, daysLate, parentName }) => {
+    rows += `<tr>
+      <td class="dash-td-name">${esc(task.name)}</td>
+      <td class="dash-td-late">${daysLate}d late</td>
+      <td class="dash-td-parent">${esc(parentName)}</td>
+    </tr>`;
+  });
+
+  return `<div class="dash-section">
+    <div class="dash-section-title">Overdue Tasks</div>
+    <table class="dash-table"><tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+/* ---------- 6. Upcoming Milestones ---------- */
+function _buildDashMilestones() {
+  const now = new Date();
+  const milestones = allTasks
+    .filter(t => t.isMilestone)
+    .map(t => ({ task: t, date: t.start || t.finish }))
+    .filter(m => m.date)
+    .sort((a, b) => a.date - b.date)
+    .slice(0, 8);
+
+  if (milestones.length === 0) return `<div class="dash-section"><div class="dash-section-title">Milestones</div><div class="dash-empty">No milestones</div></div>`;
+
+  let rows = '';
+  milestones.forEach(({ task, date }) => {
+    const pct = task.percentComplete || 0;
+    const diffDays = Math.ceil((date - now) / 86400000);
+    let statusCls, statusText;
+    if (pct >= 1) { statusCls = 'completed'; statusText = 'Done'; }
+    else if (diffDays < 0) { statusCls = 'overdue'; statusText = `${Math.abs(diffDays)}d late`; }
+    else if (diffDays <= 7) { statusCls = 'soon'; statusText = `${diffDays}d left`; }
+    else { statusCls = 'future'; statusText = fmtDate(date); }
+    rows += `<tr>
+      <td class="dash-td-name">${esc(task.name)}</td>
+      <td class="dash-td-date">${fmtDate(date)}</td>
+      <td><span class="dash-ms-status ${statusCls}">${statusText}</span></td>
+    </tr>`;
+  });
+
+  return `<div class="dash-section">
+    <div class="dash-section-title">Milestones</div>
+    <table class="dash-table"><tbody>${rows}</tbody></table>
+  </div>`;
+}

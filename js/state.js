@@ -107,7 +107,7 @@ let calendars = {};
 let teams = {};
 /** @type {Object} Derived team color lookup { teamName: '#hex' } */
 const TEAM_COLORS = {};
-/** @type {'roadmap'|'dati'|'org'} Active tab */
+/** @type {'roadmap'|'dati'|'dashboard'|'org'} Active tab */
 let currentTab = 'roadmap';
 
 /* =====================================================================
@@ -283,4 +283,6 @@ function initDOMCache() {
   DOM.filterTeam = document.getElementById('filter-team');
   DOM.orgWrapper = document.getElementById('org-wrapper');
   DOM.orgChart = document.getElementById('org-chart');
+  DOM.dashWrapper = document.getElementById('dashboard-wrapper');
+  DOM.dashContent = document.getElementById('dash-content');
 }

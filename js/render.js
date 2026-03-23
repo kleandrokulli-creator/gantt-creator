@@ -1703,8 +1703,7 @@ function _buildDashLabelBreakdown() {
   let rows = '';
   entries.forEach(([label, data]) => {
     const pct = Math.round((data.sumPct / data.total) * 100);
-    const lbl = labelColors.find(l => l.name === label);
-    const color = lbl ? lbl.color : '#64748B';
+    const color = LABEL_COLORS[label] || '#64748B';
     rows += `<div class="dash-bar-row">
       <span class="dash-bar-dot" style="background:${color}"></span>
       <span class="dash-bar-name">${esc(label)}</span>

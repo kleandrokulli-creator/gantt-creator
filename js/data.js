@@ -1195,17 +1195,38 @@ function applyDependencyConstraint(task, dep, predecessor) {
 function exportExcel() {
   const wb = XLSX.utils.book_new();
   const data = [];
-  const metaKeys = ['projectName', 'planOwner', 'startDate', 'finishDate', 'duration', 'percentComplete', 'exportedOn'];
-  const metaLabels = ['Project name', 'Plan owner', 'Start date', 'Finish date', 'Duration', '% complete', 'Exported on'];
-  for (let i = 0; i < 7; i++) {
-    if (parsedMetaRows[i]) {
-      data.push([...parsedMetaRows[i]]);
-    } else {
-      const mk = metaKeys[i];
-      const mv = projectMeta[mk];
-      data.push([mv ? mv.label : metaLabels[i], mv ? mv.value : '']);
-    }
+
+  // Helper: format date as DD/MM/YYYY
+  function fmtExcelDate(d) {
+    if (!d) return '';
+    const dt = d instanceof Date ? d : new Date(d);
+    if (isNaN(dt)) return String(d);
+    return String(dt.getDate()).padStart(2, '0') + '/' +
+           String(dt.getMonth() + 1).padStart(2, '0') + '/' +
+           dt.getFullYear();
   }
+
+  // Compute live project metadata (never use stale/hardcoded values)
+  let projStart = null, projFinish = null, totalPct = 0, taskCount = 0;
+  allTasks.forEach(t => {
+    if (t.start && (!projStart || t.start < projStart)) projStart = t.start;
+    if (t.finish && (!projFinish || t.finish > projFinish)) projFinish = t.finish;
+    if (t.depth === 1) { totalPct += (t.percentComplete || 0); taskCount++; }
+  });
+  const avgPct = taskCount > 0 ? Math.round((totalPct / taskCount) * 100) + '%' : '0%';
+  const projDuration = projStart && projFinish
+    ? Math.round((projFinish - projStart) / 86400000) + ' days' : '';
+
+  const projName = projectMeta.projectName?.value || projects[currentProjectId]?.name || '';
+
+  data.push([projectMeta.projectName?.label || 'Project name', projName]);
+  data.push([projectMeta.planOwner?.label || 'Plan owner', '']);
+  data.push([projectMeta.startDate?.label || 'Project start', fmtExcelDate(projStart)]);
+  data.push([projectMeta.finishDate?.label || 'Project finish', fmtExcelDate(projFinish)]);
+  data.push([projectMeta.duration?.label || 'Duration', projDuration]);
+  data.push([projectMeta.percentComplete?.label || '% complete', avgPct]);
+  data.push([projectMeta.exportedOn?.label || 'Exported on', fmtExcelDate(new Date())]);
+
   data.push([]);
   const headers = parsedHeaderRow.length
     ? [...parsedHeaderRow]
@@ -1216,7 +1237,7 @@ function exportExcel() {
   allTasks.forEach(t => {
     data.push([
       t.taskNumber, t.outline, t.name,
-      t.start || '', t.finish || '', t.duration,
+      fmtExcelDate(t.start), fmtExcelDate(t.finish), t.duration,
       t.labels.join(';'), t.bucket, t.priority,
       t.dependsOn, t.percentComplete, t.dependents, t.effort || '',
       t.assigned || '', t.status || '', t.cost || '', t.sprint || '', t.category || ''

@@ -290,7 +290,7 @@ function renameTeamMember(teamId, oldName, newName) {
 
 function _buildCleanOrgNode(id, team) {
   const memberCount = team.members.length;
-  let html = `<div style="background:#fff;border:2px solid ${team.color};border-radius:12px;padding:14px 16px;min-width:180px;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.08)">`;
+  let html = `<div data-export-id="${id}" style="background:#fff;border:2px solid ${team.color};border-radius:12px;padding:14px 16px;min-width:180px;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.08)">`;
   // Header
   html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:${memberCount > 0 ? '8px' : '0'}">`;
   html += `<span style="width:14px;height:14px;border-radius:50%;background:${team.color};display:inline-block;flex-shrink:0"></span>`;
@@ -343,23 +343,57 @@ function exportOrgChartPNG() {
   });
   cleanHtml += `</div>`;
 
-  // Render in offscreen container
+  // Render in offscreen container (but visible for getBoundingClientRect)
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;z-index:-1';
+  container.style.cssText = 'position:fixed;left:0;top:0;background:#fff;z-index:99999;opacity:0;pointer-events:none';
   container.innerHTML = cleanHtml;
   document.body.appendChild(container);
 
-  html2canvas(container, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
-    container.remove();
-    const a = document.createElement('a');
-    a.download = (projName).replace(/[^a-zA-Z0-9_\- ]/g, '_') + '_OrgChart.png';
-    a.href = canvas.toDataURL('image/png');
-    a.click();
-    showToast('Org Chart PNG exported', 'info', 2000);
-  }).catch(err => {
-    container.remove();
-    showToast('Export failed: ' + err.message, 'error');
-  });
+  // Add connector lines using HTML divs (not SVG, for better html2canvas support)
+  requestAnimationFrame(() => {
+    const containerRect = container.getBoundingClientRect();
+    teamEntries.forEach(([id, team]) => {
+      if (!team.parentId || !teams[team.parentId]) return;
+      const parentEl = container.querySelector(`[data-export-id="${team.parentId}"]`);
+      const childEl = container.querySelector(`[data-export-id="${id}"]`);
+      if (!parentEl || !childEl) return;
+      const pR = parentEl.getBoundingClientRect();
+      const cR = childEl.getBoundingClientRect();
+      const px = pR.left + pR.width / 2 - containerRect.left;
+      const py = pR.bottom - containerRect.top;
+      const cx = cR.left + cR.width / 2 - containerRect.left;
+      const cy = cR.top - containerRect.top;
+      const midY = (py + cy) / 2;
+      // Vertical line from parent down to midpoint
+      const v1 = document.createElement('div');
+      v1.style.cssText = `position:absolute;left:${px}px;top:${py}px;width:2px;height:${midY - py}px;background:#CBD5E1`;
+      container.firstChild.appendChild(v1);
+      // Horizontal line at midpoint
+      const minX = Math.min(px, cx), maxX = Math.max(px, cx);
+      if (Math.abs(px - cx) > 2) {
+        const h = document.createElement('div');
+        h.style.cssText = `position:absolute;left:${minX}px;top:${midY}px;width:${maxX - minX}px;height:2px;background:#CBD5E1`;
+        container.firstChild.appendChild(h);
+      }
+      // Vertical line from midpoint down to child
+      const v2 = document.createElement('div');
+      v2.style.cssText = `position:absolute;left:${cx}px;top:${midY}px;width:2px;height:${cy - midY}px;background:#CBD5E1`;
+      container.firstChild.appendChild(v2);
+    });
+    container.firstChild.style.position = 'relative';
+
+    html2canvas(container, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
+      container.remove();
+      const a = document.createElement('a');
+      a.download = (projName).replace(/[^a-zA-Z0-9_\- ]/g, '_') + '_OrgChart.png';
+      a.href = canvas.toDataURL('image/png');
+      a.click();
+      showToast('Org Chart PNG exported', 'info', 2000);
+    }).catch(err => {
+      container.remove();
+      showToast('Export failed: ' + err.message, 'error');
+    });
+  }); // end requestAnimationFrame
 }
 
 function renameBucket(oldName, newName) {

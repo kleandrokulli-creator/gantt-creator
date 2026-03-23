@@ -672,6 +672,41 @@ input:focus-visible, textarea:focus-visible {
   outline-offset: -1px;
 }
 
+/* ===== DASHBOARD ===== */
+.dash-toolbar{padding:12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.dash-mode-toggle{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.dash-mode-btn{padding:4px 12px;font-size:.78rem;cursor:pointer;border:none;background:var(--card);color:var(--body-fg);font-family:inherit;transition:background .1s}
+.dash-mode-btn.active{background:var(--blue);color:#fff}
+.dash-mode-btn:hover:not(.active){background:var(--row-hover)}
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:20px}
+.dash-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;transition:box-shadow .15s,transform .1s;position:relative;overflow:hidden}
+.dash-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.dash-card-status{position:absolute;top:0;left:0;right:0;height:3px}
+.dash-card-name{font-weight:600;font-size:.9rem;margin-bottom:4px}
+.dash-card-meta{font-size:.72rem;color:var(--grey-txt);margin-bottom:2px}
+.dash-card-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.dash-card-bar .fill{height:100%;border-radius:3px;transition:width .3s}
+.dash-card-stats{font-size:.72rem;color:var(--grey-txt);margin-top:8px}
+.dash-card-teams{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px}
+.dash-summary{border-top:1px solid var(--border);padding:10px 20px;display:flex;gap:20px;font-size:.78rem;color:var(--grey-txt);flex-shrink:0}
+.dash-stat{display:flex;align-items:center;gap:4px}
+.dash-stat-value{font-weight:600;color:var(--body-fg)}
+
+/* Kanban */
+.kanban-wrapper{display:flex;gap:16px;padding:20px;min-height:400px}
+.kanban-col{flex:1;min-width:200px}
+.kanban-col-header{font-weight:600;font-size:.82rem;padding:8px 12px;border-radius:8px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.kanban-col-header.not-started{background:rgba(148,163,184,.12);color:#64748B}
+.kanban-col-header.in-progress{background:rgba(59,130,246,.1);color:#2563EB}
+.kanban-col-header.completed{background:rgba(22,163,74,.1);color:#16A34A}
+.kanban-cards{display:flex;flex-direction:column;gap:8px}
+.kanban-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;transition:box-shadow .15s}
+.kanban-card:hover{box-shadow:var(--shadow-lg)}
+.kanban-card-name{font-weight:500;font-size:.82rem;margin-bottom:4px}
+.kanban-card-meta{font-size:.72rem;color:var(--grey-txt)}
+.kanban-card-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:6px}
+.kanban-card-bar .fill{height:100%;border-radius:2px}
+
 /* ===== ORG CHART (Tree Builder) ===== */
 .org-chart{max-width:1400px;margin:0 auto}
 .org-empty{text-align:center;padding:60px 20px;color:var(--grey-txt);font-size:.9rem}

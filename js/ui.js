@@ -467,10 +467,12 @@ function switchTab(tab) {
   const gw = DOM.ganttWrapper;
   const dw = DOM.datiWrapper;
   const ow = DOM.orgWrapper;
+  const daw = DOM.dashWrapper;
   // Hide all wrappers first
   gw.classList.remove('active'); gw.classList.add('hidden');
   dw.classList.remove('active');
   if (ow) ow.style.display = 'none';
+  if (daw) daw.style.display = 'none';
 
   if (tab === 'roadmap') {
     gw.style.opacity = '0';
@@ -482,6 +484,9 @@ function switchTab(tab) {
     dw.classList.add('active');
     renderDataTable();
     requestAnimationFrame(() => { dw.style.opacity = '1'; });
+  } else if (tab === 'dashboard') {
+    if (daw) { daw.style.display = 'flex'; }
+    if (typeof renderDashboard === 'function') renderDashboard();
   } else if (tab === 'org') {
     if (ow) { ow.style.display = 'flex'; ow.style.flexDirection = 'column'; }
     if (typeof renderOrgChart === 'function') renderOrgChart();

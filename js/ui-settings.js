@@ -288,35 +288,76 @@ function renameTeamMember(teamId, oldName, newName) {
 
 /* ---------- ORG CHART EXPORT ---------- */
 
-function exportOrgChartPNG() {
-  const tree = document.getElementById('org-tree');
-  if (!tree) return;
-  // Hide interactive elements before capture
-  tree.querySelectorAll('.org-node-btn, .org-node-add, .org-toolbar').forEach(el => el.style.display = 'none');
-  // Replace inputs with static text for cleaner look
-  tree.querySelectorAll('.org-node-name, .org-node-member-name').forEach(input => {
-    input.dataset.origBorder = input.style.border;
-    input.style.border = 'none';
-    input.style.background = 'transparent';
-  });
-  html2canvas(tree, { backgroundColor: null, scale: 2, useCORS: true }).then(canvas => {
-    // Restore interactive elements
-    tree.querySelectorAll('.org-node-btn, .org-node-add, .org-toolbar').forEach(el => el.style.display = '');
-    tree.querySelectorAll('.org-node-name, .org-node-member-name').forEach(input => {
-      input.style.border = input.dataset.origBorder || '';
+function _buildCleanOrgNode(id, team) {
+  const memberCount = team.members.length;
+  let html = `<div style="background:#fff;border:2px solid ${team.color};border-radius:12px;padding:14px 16px;min-width:180px;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.08)">`;
+  // Header
+  html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:${memberCount > 0 ? '8px' : '0'}">`;
+  html += `<span style="width:14px;height:14px;border-radius:50%;background:${team.color};display:inline-block;flex-shrink:0"></span>`;
+  html += `<span style="font-weight:700;font-size:14px;color:#1E293B">${esc(team.name)}</span>`;
+  html += `<span style="font-size:11px;color:#94A3B8;margin-left:auto">${memberCount}</span>`;
+  html += `</div>`;
+  // Members
+  if (memberCount > 0) {
+    html += `<div style="border-top:1px solid #E2E8F0;padding-top:6px;display:flex;flex-direction:column;gap:3px">`;
+    team.members.forEach(m => {
+      const initials = getInitials(m);
+      const taskCount = allTasks.filter(t => (t.assigned || []).includes(team.name)).length;
+      html += `<div style="display:flex;align-items:center;gap:6px">`;
+      html += `<span style="width:20px;height:20px;border-radius:50%;background:${team.color};color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">${initials}</span>`;
+      html += `<span style="font-size:12px;color:#334155">${esc(m)}</span>`;
+      html += `</div>`;
     });
-    // Download
+    html += `</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+function exportOrgChartPNG() {
+  if (Object.keys(teams).length === 0) { showToast('No teams to export', 'info'); return; }
+
+  // Build a clean static version in a temp container
+  const teamEntries = Object.entries(teams);
+  function getChildren(parentId) {
+    return teamEntries.filter(([_, t]) => (t.parentId || null) === parentId).map(([id]) => id);
+  }
+  const roots = teamEntries.filter(([_, t]) => !t.parentId).map(([id]) => id);
+  const levels = [];
+  let queue = [...roots];
+  while (queue.length > 0) {
+    levels.push([...queue]);
+    const next = [];
+    queue.forEach(id => getChildren(id).forEach(cid => next.push(cid)));
+    queue = next;
+  }
+
+  const projName = projects[currentProjectId]?.name || 'Org Chart';
+  let cleanHtml = `<div style="padding:24px;font-family:'Inter',system-ui,sans-serif">`;
+  cleanHtml += `<div style="text-align:center;margin-bottom:20px;font-size:18px;font-weight:700;color:#1E293B">${esc(projName)} - Org Chart</div>`;
+
+  levels.forEach(levelIds => {
+    cleanHtml += `<div style="display:flex;justify-content:center;gap:20px;margin-bottom:36px">`;
+    levelIds.forEach(id => { cleanHtml += _buildCleanOrgNode(id, teams[id]); });
+    cleanHtml += `</div>`;
+  });
+  cleanHtml += `</div>`;
+
+  // Render in offscreen container
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;z-index:-1';
+  container.innerHTML = cleanHtml;
+  document.body.appendChild(container);
+
+  html2canvas(container, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
+    container.remove();
     const a = document.createElement('a');
-    const projName = (projects[currentProjectId]?.name || 'OrgChart').replace(/[^a-zA-Z0-9_-]/g, '_');
-    a.download = projName + '_OrgChart.png';
+    a.download = (projName).replace(/[^a-zA-Z0-9_\- ]/g, '_') + '_OrgChart.png';
     a.href = canvas.toDataURL('image/png');
     a.click();
+    showToast('Org Chart PNG exported', 'info', 2000);
   }).catch(err => {
-    // Restore on error
-    tree.querySelectorAll('.org-node-btn, .org-node-add, .org-toolbar').forEach(el => el.style.display = '');
-    tree.querySelectorAll('.org-node-name, .org-node-member-name').forEach(input => {
-      input.style.border = input.dataset.origBorder || '';
-    });
+    container.remove();
     showToast('Export failed: ' + err.message, 'error');
   });
 }

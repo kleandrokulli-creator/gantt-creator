@@ -485,7 +485,7 @@ function switchTab(tab) {
     renderDataTable();
     requestAnimationFrame(() => { dw.style.opacity = '1'; });
   } else if (tab === 'dashboard') {
-    if (daw) daw.style.display = 'block';
+    if (daw) { daw.style.display = 'block'; daw.style.flex = '1'; }
     if (typeof renderDashboard === 'function') renderDashboard();
   } else if (tab === 'org') {
     if (ow) { ow.style.display = 'flex'; ow.style.flexDirection = 'column'; }

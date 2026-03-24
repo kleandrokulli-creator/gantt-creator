@@ -219,6 +219,8 @@ function loadProjectById(id) {
   updateShowAllBtn();
   renderAll();
   if (currentTab === 'dati') renderDataTable();
+  if (currentTab === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+  if (currentTab === 'org' && typeof renderOrgChart === 'function') renderOrgChart();
   renderProjectSelector();
   AppStorage.setCurrentProjectId(id);
 }
@@ -296,16 +298,19 @@ async function createNewProject(name) {
   Object.keys(PRIORITY_COLORS).forEach(k => delete PRIORITY_COLORS[k]);
   Object.assign(PRIORITY_COLORS, defaults.priorityColors);
 
-  // Reset calendars for the new project
+  // Reset calendars and teams for the new project
   calendars = {};
   ensureDefaultCalendar();
   invalidateHolidayCache();
+  teams = {};
+  rebuildTeamColors();
 
   projects[id] = {
     name: trimmed, meta: {}, tasks: [],
     labelColors: { ...LABEL_COLORS }, bucketColors: { ...BUCKET_COLORS },
     priorityColors: { ...PRIORITY_COLORS }, rolloutColors: { ...BUCKET_COLORS },
     calendars: JSON.parse(JSON.stringify(calendars)),
+    teams: {},
     workingDaysMode: workingDaysMode,
     splitBarsMode: splitBarsMode
   };

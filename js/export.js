@@ -599,7 +599,8 @@ function _buildHTMLInit() {
   const _noop = document.createElement('div');
   ['projectSelect','projectInfo','saveIndicator','settingsBody',
    'datiWrapper','dtHeader','dtBody','btnDeleteSel','btnShowAll',
-   'loading','dropOverlay','fileInput'].forEach(k => {
+   'loading','dropOverlay','fileInput',
+   'orgWrapper','orgChart','dashWrapper','dashContent','dashToolbar','dashSummary','filterTeam'].forEach(k => {
     if (!DOM[k]) DOM[k] = _noop;
   });
 

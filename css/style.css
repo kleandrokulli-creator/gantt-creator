@@ -359,7 +359,7 @@ body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--b
 .modal .modal-body .setting-row{display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--border);transition:background .1s}
 .modal .modal-body .setting-row:hover{background:var(--bg);border-radius:6px}
 .modal .modal-body .setting-row:last-child{border-bottom:none}
-.modal .modal-body .setting-row .swatch{width:28px;height:28px;border-radius:8px;cursor:pointer;border:2px solid var(--border);flex-shrink:0;transition:transform .1s}
+.modal .modal-body .setting-row .swatch{width:28px;height:28px;border-radius:8px;cursor:pointer;border:2px solid var(--border);flex-shrink:0;transition:transform .1s;display:inline-block}
 .modal .modal-body .setting-row .swatch:hover{transform:scale(1.15)}
 .modal .modal-body .setting-row input[type="text"]{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.35rem .6rem;font-family:inherit;font-size:.82rem;color:var(--body-fg);outline:none;transition:border-color .15s}
 .modal .modal-body .setting-row input[type="text"]:focus{border-color:var(--blue)}
@@ -744,7 +744,7 @@ input:focus-visible, textarea:focus-visible {
 .org-node-task-count{font-size:.65rem;color:var(--grey-txt);min-width:14px;text-align:right}
 .org-node-add{font-size:.72rem;color:var(--grey-txt);cursor:pointer;padding:3px 0;border:none;background:none;font-family:inherit;display:block;text-align:left}
 .org-node-add:hover{color:var(--blue)}
-.org-color-palette{z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px;box-shadow:var(--shadow-lg);display:grid;grid-template-columns:repeat(8,1fr);gap:4px;width:200px}
+.org-color-palette{z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px;box-shadow:var(--shadow-lg);display:grid;grid-template-columns:repeat(6,1fr);gap:4px;width:168px}
 .org-palette-swatch{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .1s,border-color .1s}
 .org-palette-swatch:hover{transform:scale(1.2)}
 .org-palette-swatch.active{border-color:var(--body-fg)}

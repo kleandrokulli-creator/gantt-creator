@@ -35,7 +35,7 @@ function renderSettingsBody() {
     }
     entries.forEach(([name, color]) => {
       html += `<div class="setting-row">
-        <input type="color" class="swatch" value="${color}" onchange="LABEL_COLORS['${esc(name)}']=this.value;renderAll();if(currentTab==='dati')renderDataTable();scheduleSave()">
+        <span class="swatch" style="background:${color}" onclick="showSettingsColorPalette(this,'${color}',c=>{LABEL_COLORS['${esc(name)}']=c;renderAll();if(currentTab==='dati')renderDataTable();renderSettingsBody();scheduleSave()})"></span>
         <input type="text" value="${esc(name)}" onchange="renameLabel('${esc(name)}',this.value)">
         <button class="del-btn" onclick="deleteLabel('${esc(name)}')" title="Delete label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>`;
@@ -54,7 +54,7 @@ function renderSettingsBody() {
     buckets.forEach(b => {
       const color = BUCKET_COLORS[b] || DEFAULT_COLOR;
       html += `<div class="setting-row">
-        <input type="color" class="swatch" value="${color}" onchange="BUCKET_COLORS['${esc(b)}']=this.value;reassignColors();renderAll();if(currentTab==='dati')renderDataTable();scheduleSave()">
+        <span class="swatch" style="background:${color}" onclick="showSettingsColorPalette(this,'${color}',c=>{BUCKET_COLORS['${esc(b)}']=c;reassignColors();renderAll();if(currentTab==='dati')renderDataTable();renderSettingsBody();scheduleSave()})"></span>
         <input type="text" value="${esc(b)}" onchange="renameBucketWithColor('${esc(b)}',this.value)">
         <button class="del-btn" onclick="deleteBucket('${esc(b)}')" title="Delete bucket"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
       </div>`;
@@ -69,7 +69,7 @@ function renderSettingsBody() {
     PRIORITY_OPTIONS.forEach(p => {
       const color = PRIORITY_COLORS[p] || DEFAULT_COLOR;
       html += `<div class="setting-row">
-        <input type="color" class="swatch" value="${color}" onchange="PRIORITY_COLORS['${esc(p)}']=this.value;renderAll();scheduleSave()">
+        <span class="swatch" style="background:${color}" onclick="showSettingsColorPalette(this,'${color}',c=>{PRIORITY_COLORS['${esc(p)}']=c;renderAll();renderSettingsBody();scheduleSave()})"></span>
         <span class="setting-label">${esc(p)}</span>
       </div>`;
     });
@@ -141,8 +141,7 @@ async function addLabel() {
 function showOrgColorPalette(teamId, triggerEl) {
   const old = document.querySelector('.org-color-palette');
   if (old) old.remove();
-  const palette = ['#3B82F6','#22C55E','#F59E0B','#EF4444','#8B5CF6','#EC4899','#14B8A6','#F97316',
-                   '#6366F1','#06B6D4','#84CC16','#F43F5E','#A855F7','#0EA5E9','#D946EF','#64748B'];
+  const palette = SETTINGS_PALETTE;
   const picker = document.createElement('div');
   picker.className = 'org-color-palette';
   palette.forEach(c => {
@@ -167,6 +166,52 @@ function showOrgColorPalette(teamId, triggerEl) {
   if (pRect.bottom > window.innerHeight) {
     picker.style.top = (rect.top - pRect.height - 4) + 'px';
   }
+  setTimeout(() => {
+    document.addEventListener('click', function close(e) {
+      if (!picker.contains(e.target)) { picker.remove(); document.removeEventListener('click', close); }
+    });
+  }, 0);
+}
+
+/* ---------- SETTINGS COLOR PALETTE ---------- */
+
+const SETTINGS_PALETTE = [
+  '#3B82F6','#2563EB','#1D4ED8','#22C55E','#16A34A','#15803D',
+  '#F59E0B','#D97706','#B45309','#EF4444','#DC2626','#B91C1C',
+  '#8B5CF6','#7C3AED','#6D28D9','#EC4899','#DB2777','#BE185D',
+  '#14B8A6','#0D9488','#0F766E','#F97316','#EA580C','#C2410C',
+  '#6366F1','#4F46E5','#4338CA','#06B6D4','#0891B2','#0E7490',
+  '#84CC16','#65A30D','#4D7C0F','#F43F5E','#E11D48','#BE123C',
+  '#A855F7','#9333EA','#7E22CE','#0EA5E9','#0284C7','#0369A1',
+  '#D946EF','#C026D3','#A21CAF','#64748B','#475569','#334155'
+];
+
+function showSettingsColorPalette(triggerEl, currentColor, onSelect) {
+  const old = document.querySelector('.settings-color-palette');
+  if (old) old.remove();
+  const picker = document.createElement('div');
+  picker.className = 'org-color-palette settings-color-palette';
+  picker.style.gridTemplateColumns = 'repeat(6, 1fr)';
+  picker.style.width = '168px';
+  SETTINGS_PALETTE.forEach(c => {
+    const swatch = document.createElement('span');
+    swatch.className = 'org-palette-swatch' + (currentColor === c ? ' active' : '');
+    swatch.style.background = c;
+    swatch.onclick = function(e) {
+      e.stopPropagation();
+      onSelect(c);
+      picker.remove();
+    };
+    picker.appendChild(swatch);
+  });
+  const rect = triggerEl.getBoundingClientRect();
+  picker.style.position = 'fixed';
+  picker.style.left = rect.left + 'px';
+  picker.style.top = (rect.bottom + 4) + 'px';
+  document.body.appendChild(picker);
+  const pRect = picker.getBoundingClientRect();
+  if (pRect.bottom > window.innerHeight) picker.style.top = (rect.top - pRect.height - 4) + 'px';
+  if (pRect.right > window.innerWidth) picker.style.left = (window.innerWidth - pRect.width - 8) + 'px';
   setTimeout(() => {
     document.addEventListener('click', function close(e) {
       if (!picker.contains(e.target)) { picker.remove(); document.removeEventListener('click', close); }

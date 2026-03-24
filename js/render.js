@@ -1570,7 +1570,7 @@ function _avgCompletion(tasks) {
 }
 
 function renderDashboard() {
-  const el = DOM.dashContent;
+  const el = DOM.dashWrapper;
   if (!el) return;
 
   let html = '<div class="dash-page">';

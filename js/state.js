@@ -284,5 +284,4 @@ function initDOMCache() {
   DOM.orgWrapper = document.getElementById('org-wrapper');
   DOM.orgChart = document.getElementById('org-chart');
   DOM.dashWrapper = document.getElementById('dashboard-wrapper');
-  DOM.dashContent = document.getElementById('dash-content');
 }

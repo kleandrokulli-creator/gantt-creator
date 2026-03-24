@@ -321,10 +321,14 @@ async function createNewProject(name) {
   getState().allExpanded = false;
   undoStack = [];
   computeDateRange();
+  populateFilterDropdowns();
+  renderProjectSelector();
   renderAll();
   if (currentTab === 'dati') renderDataTable();
-  renderProjectSelector();
+  if (currentTab === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+  if (currentTab === 'org' && typeof renderOrgChart === 'function') renderOrgChart();
   saveCurrentProjectToStorage();
+  showToast('Project created: ' + trimmed, 'info', 2000);
 }
 
 /* ---------- GLOBAL DEFAULTS ---------- */

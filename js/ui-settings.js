@@ -132,6 +132,7 @@ async function addLabel() {
   const name = await showPrompt('Enter a name for the new label:', { title: 'New Label', placeholder: 'e.g. Business, IT, Testing...' });
   if (!name || !name.trim()) return;
   LABEL_COLORS[name.trim()] = '#64748B';
+  populateFilterDropdowns();
   renderSettingsBody(); scheduleSave();
 }
 
@@ -205,6 +206,8 @@ function renameTeam(teamId, newName) {
   teams[teamId].name = newName.trim();
   rebuildTeamColors();
   populateFilterDropdowns();
+  if (currentTab === 'roadmap') renderAll();
+  if (currentTab === 'dati') renderDataTable();
   scheduleSave();
 }
 
@@ -241,6 +244,8 @@ function changeTeamColor(teamId, color) {
   teams[teamId].color = color;
   rebuildTeamColors();
   renderOrgChart();
+  if (currentTab === 'roadmap') renderAll();
+  if (currentTab === 'dati') renderDataTable();
   scheduleSave();
 }
 
@@ -269,6 +274,8 @@ function removeTeamMember(teamId, memberName) {
     }
   });
   renderOrgChart();
+  if (currentTab === 'roadmap') renderAll();
+  if (currentTab === 'dati') renderDataTable();
   scheduleSave();
 }
 
@@ -283,6 +290,8 @@ function renameTeamMember(teamId, oldName, newName) {
     }
   });
   renderOrgChart();
+  if (currentTab === 'roadmap') renderAll();
+  if (currentTab === 'dati') renderDataTable();
   scheduleSave();
 }
 
@@ -578,7 +587,9 @@ function addCalendar() {
   calendars[id] = { name: name.trim(), isDefault: false, entries: [], color: available[0] || CALENDAR_COLORS[Object.keys(calendars).length % CALENDAR_COLORS.length] };
   _selectedCalId = id;
   invalidateHolidayCache();
+  recalcFinishDates();
   renderSettingsBody();
+  renderAll();
   scheduleSave();
 }
 
@@ -586,6 +597,7 @@ function renameCalendar(id, newName) {
   if (!newName.trim()) return;
   calendars[id].name = newName.trim();
   renderSettingsBody();
+  renderAll();
   if (currentTab === 'dati') renderDataTable();
   scheduleSave();
 }

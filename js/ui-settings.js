@@ -528,7 +528,7 @@ function renderCalendarSettingsHTML() {
     html += `<div class="cal-detail">`;
     html += `<div class="setting-row" style="gap:8px;margin-bottom:8px">
       <input type="text" value="${esc(cal.name)}" onchange="renameCalendar('${_selectedCalId}',this.value)" style="flex:1">
-      <input type="color" value="${cal.color}" onchange="changeCalendarColor('${_selectedCalId}',this.value)" class="swatch" title="Calendar color">
+      <span class="swatch" style="background:${cal.color}" onclick="showSettingsColorPalette(this,'${cal.color}',c=>{changeCalendarColor('${_selectedCalId}',c);renderSettingsBody()})" title="Calendar color"></span>
       ${cal.isDefault ? '' : `<button class="del-btn" onclick="setDefaultCalendar('${_selectedCalId}')" title="Set as default" style="font-size:.7rem;padding:2px 6px;background:var(--blue);color:#fff;border:none;border-radius:4px;cursor:pointer">Set Default</button>`}
       ${calIds.length > 1 ? `<button class="del-btn" onclick="deleteCalendar('${_selectedCalId}')" title="Delete calendar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>` : ''}
     </div>`;
